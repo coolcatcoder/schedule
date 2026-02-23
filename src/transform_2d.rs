@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::{Deref, DerefMut}, ptr::null_mut};
 
 use bevy::{prelude::*, ptr::move_as_ptr};
 
@@ -25,10 +25,71 @@ impl<T: 'static> MakeReference<false> for T {
 
 pub struct Transform2dItem<'a, const MUT: bool>(pub <Transform as MakeReference<MUT>>::Output<'a>) where Transform: MakeReference<MUT>;
 
-struct Bad<'a> {
-    x: &'a f32,
-    y: &'a f32,
-    rotation: &'a Quat,
+pub struct Transform2dItemMutInner<'a> {
+    pub translation: &'a mut Vec2,
+    pub rotation: &'a mut Quat,
+    pub scale: &'a mut Vec2,
+}
+
+pub struct Transform2dItemMut<'a>(Transform2dItemMutInner<'a>, Mut<'a, ()>);
+
+impl<'a> Deref for Transform2dItemMut<'a> {
+    type Target = Transform2dItemMutInner<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> DerefMut for Transform2dItemMut<'a> {
+    #[track_caller]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.1.set_changed();
+        &mut self.0
+    }
+}
+
+fn vec3_to_vec2(value: &mut Vec3) -> &mut Vec2 {
+    let value: &mut [f32; 3] = value.as_mut();
+    let value: *mut [f32; 3] = value;
+    let value: *mut [f32; 2] = value as *mut [f32; 2];
+    let value: *mut Vec2 = value as *mut Vec2;
+    // SAFETY: Miri allows it.
+    let value: &mut Vec2 = unsafe { &mut *value };
+    value
+}
+
+
+impl<'a> From<Mut<'a, Transform>> for Transform2dItemMut<'a> {
+    fn from(value: Mut<'a, Transform>) -> Self {
+        // Bevy would not have to do this.
+        // I have to, due to not having access to the fields of Mut.
+        let mut stolen_value: *mut Transform = null_mut();
+        let change_detection = value.map_unchanged(|value| {
+            static mut WEIRD: &mut () = &mut ();
+
+            stolen_value = value;
+            // SAFETY: This is blatantly unsound. We just never ever access the value, and therefore hopefully it will be okay.
+            unsafe { WEIRD }
+        });
+        let value = unsafe { &mut *stolen_value };
+
+        Self(Transform2dItemMutInner {
+            translation: vec3_to_vec2(&mut value.translation),
+            rotation: &mut value.rotation,
+            scale: vec3_to_vec2(&mut value.scale),
+        }, change_detection)
+    }
+}
+
+impl<'a> Transform2dItemMut<'a> {
+    fn from<'b>(value: Transform2dItemMut<'b>) -> Self where 'b: 'a {
+        Transform2dItemMut(value.0, value.1)
+    }
+
+    pub fn is_changed(&self) -> bool {
+        self.1.is_changed()
+    }
 }
 
 // impl<'a> Deref for Transform2dItem<'a, false> {
@@ -65,12 +126,9 @@ impl<'a> Transform2dItem<'a, true> {
     }
 }
 
-// I am using these to test that my my macro still works when used normally.
-//query_data!(Transform2d, &, (Transform));
-//query_data!(Transform2d, &mut, (Transform));
-
 query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Transform));
-query_data!(|internal| Transform2d, &mut, Transform2dItem<'w, true>, (&'static mut Transform));
+//query_data!(|internal| Transform2d, &mut, Transform2dItem<'w, true>, (&'static mut Transform));
+query_data!(|internal| Transform2d, &mut, Transform2dItemMut<'w>, (&'static mut Transform));
 
 fn tester(mut blah: Single<&Transform2d>, mut commands: Commands) {
     let blah = &*blah;

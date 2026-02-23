@@ -26,7 +26,7 @@ fn main() {
             ..default()
         }))
         .add_systems(Startup, start)
-        .add_systems(Update, rotate)
+        .add_systems(Update, (rotate, tester))
         .run();
 }
 
@@ -93,6 +93,10 @@ fn rotate(mut gradient: Single<&mut BackgroundGradient>, time: Res<Time>, mut ba
 
     gradient.start = (gradient.start.to_degrees() + 25. * time.delta_secs()).to_radians();
 
-    info!("{}", bad.0.translation);
-    bad.0.translation.x += 1.;
+    info!("{}", bad.translation);
+    bad.translation.x += 1.;
+}
+
+fn tester(bad: Single<&mut Transform2d, With<Marker>>) {
+    info!("{}", bad.is_changed());
 }
