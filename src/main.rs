@@ -85,7 +85,7 @@ fn start(mut commands: Commands) {
 #[derive(Component)]
 struct Marker;
 
-fn rotate(mut gradient: Single<&mut BackgroundGradient>, time: Res<Time>, bad: Single<&Transform2d, With<Marker>>) {
+fn rotate(mut gradient: Single<&mut BackgroundGradient>, time: Res<Time>, mut bad: Single<&mut Transform2d, With<Marker>>) {
     let Gradient::Conic(gradient) = &mut gradient.0[0] else {
         error!("Failed to get gradient.");
         return;
@@ -94,4 +94,5 @@ fn rotate(mut gradient: Single<&mut BackgroundGradient>, time: Res<Time>, bad: S
     gradient.start = (gradient.start.to_degrees() + 25. * time.delta_secs()).to_radians();
 
     info!("{}", bad.0.translation);
+    bad.0.translation.x += 1.;
 }
