@@ -43,7 +43,6 @@ query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Tra
 fn tester(mut blah: Single<&Transform2d>, mut commands: Commands) {
     let blah = &*blah;
 
-    // TODO: This won't currently compile, because I haven't gotten around to manually implementing Bundle.
     commands.spawn(Transform2d {
         translation: Vec2::new(2.3, 9.8),
         rotation: Rot2::IDENTITY,
