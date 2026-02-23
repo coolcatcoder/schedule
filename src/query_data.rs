@@ -1,4 +1,4 @@
-use bevy::{ecs::bundle::Bundle, transform::components::Transform};
+use bevy::{ecs::{bundle::Bundle, query::QueryData}, prelude::*};
 
 
 
@@ -16,22 +16,32 @@ macro_rules! query_data {
         $($not_mut)*
     };
 
-    ($name:ident, &$($ref:ident)?, ($($field_type:ty),*)) => {
+    ($name:ident, &mut, ($($field_type:ty),*)) => {
+        $crate::query_data!(|internal| $name, &mut, <($(&'static mut $field_type),*) as QueryData>::Item<'w, 's>, ($(&'static mut $field_type),*));
+    };
+    ($name:ident, &, ($($field_type:ty),*)) => {
+        $crate::query_data!(|internal| $name, &, <($(&'static $field_type),*) as QueryData>::Item<'w, 's>, ($(&'static $field_type),*));
+    };
+
+    (|internal| $name:ident, &$($ref:ident)?, $item:ty, $tuple:ty) => {
         #[allow(unused_parens)]
         const _: () = {
+            use bevy::ecs::query::{WorldQuery, QueryData};
+            use bevy::prelude::*;
+
             $crate::query_data! {
                 if_mut $($ref)? {
                     
                 } else {
-                    unsafe impl ReadOnlyQueryData for &$name {}
+                    unsafe impl bevy::ecs::query::ReadOnlyQueryData for &$name {}
                 }
             }
 
             unsafe impl WorldQuery for &$($ref)?$name {
-                const IS_DENSE: bool = <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::IS_DENSE;
+                const IS_DENSE: bool = <$tuple as WorldQuery>::IS_DENSE;
 
-                type Fetch<'w> = <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::Fetch<'w>;
-                type State = <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::State;
+                type Fetch<'w> = <$tuple as WorldQuery>::Fetch<'w>;
+                type State = <$tuple as WorldQuery>::State;
 
                 fn shrink_fetch<'wlong: 'wshort, 'wshort>(fetch: Self::Fetch<'wlong>) -> Self::Fetch<'wshort> {
                     fetch
@@ -43,7 +53,7 @@ macro_rules! query_data {
                         last_run: bevy::ecs::change_detection::Tick,
                         this_run: bevy::ecs::change_detection::Tick,
                     ) -> Self::Fetch<'w> {
-                        unsafe { <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::init_fetch(world, state, last_run, this_run) }
+                        unsafe { <$tuple as WorldQuery>::init_fetch(world, state, last_run, this_run) }
                 }
 
                 unsafe fn set_archetype<'w>(
@@ -52,7 +62,7 @@ macro_rules! query_data {
                     archetype: &'w bevy::ecs::archetype::Archetype,
                     table: &'w bevy::ecs::storage::Table,
                     ) {
-                    unsafe { <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::set_archetype(fetch, state, archetype, table) }
+                    unsafe { <$tuple as WorldQuery>::set_archetype(fetch, state, archetype, table) }
                 }
 
                 unsafe fn set_table<'w>(
@@ -60,26 +70,26 @@ macro_rules! query_data {
                     state: &Self::State,
                     table: &'w bevy::ecs::storage::Table,
                 ) {
-                    unsafe { <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::set_table(fetch, state, table) }
+                    unsafe { <$tuple as WorldQuery>::set_table(fetch, state, table) }
                 }
 
                 fn update_component_access(state: &Self::State, access: &mut bevy::ecs::query::FilteredAccess) {
-                    <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::update_component_access(state, access)
+                    <$tuple as WorldQuery>::update_component_access(state, access)
                 }
 
                 fn init_state(world: &mut World) -> Self::State {
-                    <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::init_state(world)
+                    <$tuple as WorldQuery>::init_state(world)
                 }
 
                 fn get_state(components: &bevy::ecs::component::Components) -> Option<Self::State> {
-                    <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::get_state(components)
+                    <$tuple as WorldQuery>::get_state(components)
                 }
 
                 fn matches_component_set(
                         state: &Self::State,
                         set_contains_id: &impl Fn(bevy::ecs::component::ComponentId) -> bool,
                     ) -> bool {
-                    <$crate::query_data!($($ref)?, ($($field_type),*)) as WorldQuery>::matches_component_set(state, set_contains_id)
+                    <$tuple as WorldQuery>::matches_component_set(state, set_contains_id)
                 }
             }
 
@@ -91,7 +101,7 @@ macro_rules! query_data {
                         true
                     }
                 };
-                const IS_ARCHETYPAL: bool = <$crate::query_data!($($ref)?, ($($field_type),*)) as QueryData>::IS_ARCHETYPAL;
+                const IS_ARCHETYPAL: bool = <$tuple as QueryData>::IS_ARCHETYPAL;
 
                 type ReadOnly = $crate::query_data! {
                     if_mut $($ref)? {
@@ -100,12 +110,12 @@ macro_rules! query_data {
                         Self
                     }
                 };
-                type Item<'w, 's> = <$crate::query_data!($($ref)?, ($($field_type),*)) as QueryData>::Item<'w, 's>;
+                type Item<'w, 's> = $item;
 
                 fn shrink<'wlong: 'wshort, 'wshort, 's>(
                     item: Self::Item<'wlong, 's>,
                 ) -> Self::Item<'wshort, 's> {
-                    item
+                    Self::Item::<'wshort, 's>::from(item)
                 }
 
                 unsafe fn fetch<'w, 's>(
@@ -114,11 +124,12 @@ macro_rules! query_data {
                     entity: Entity,
                     table_row: bevy::ecs::storage::TableRow,
                 ) -> Option<Self::Item<'w, 's>> {
-                    unsafe { <$crate::query_data!($($ref)?, ($($field_type),*)) as QueryData>::fetch(state, fetch, entity, table_row) }
+                    let fetch = unsafe { <$tuple as QueryData>::fetch(state, fetch, entity, table_row) };
+                    fetch.map(|fetch| <$item as From<_>>::from(fetch))
                 }
 
                 fn iter_access(state: &Self::State) -> impl Iterator<Item = bevy::ecs::query::EcsAccessType<'_>> {
-                    <$crate::query_data!($($ref)?, ($($field_type),*)) as QueryData>::iter_access(state)
+                    <$tuple as QueryData>::iter_access(state)
                 }
             }
         };
@@ -137,7 +148,48 @@ macro_rules! query_data {
     };
 }
 
-#[derive(Bundle)]
-struct Transform2d(Transform);
+#[derive(Default)]
+struct Transform2d {
+    translation: Vec2,
+    rotation: Rot2,
+    scale: Vec2,
+}
 
-//struct Transform2dItem
+trait MakeReference<const MUT: bool> {
+    type Output<'a>;
+}
+
+impl<T: 'static> MakeReference<true> for T {
+    type Output<'a> = &'a mut T;
+}
+impl<T: 'static> MakeReference<false> for T {
+    type Output<'a> = &'a T;
+}
+
+struct Transform2dItem<'a, const MUT: bool>(<Transform as MakeReference<MUT>>::Output<'a>) where Transform: MakeReference<MUT>;
+
+impl<'a> From<&'a Transform> for Transform2dItem<'a, false> {
+    fn from(value: &'a Transform) -> Self {
+        Self(value)
+    }
+}
+impl<'a> Transform2dItem<'a, false> {
+    fn from<'b>(value: Transform2dItem<'b, false>) -> Self where 'b: 'a {
+        Transform2dItem(value.0)
+    }
+}
+
+// I am using these to test that my my macro still works when used normally.
+//query_data!(Transform2d, &, (Transform));
+//query_data!(Transform2d, &mut, (Transform));
+
+query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Transform));
+
+fn tester(mut blah: Single<&Transform2d>, mut commands: Commands) {
+    let blah = &*blah;
+
+    // TODO: This won't currently compile, because I haven't gotten around to manually implementing Bundle.
+    // commands.spawn(Transform2d {
+    //     ..default()
+    // });
+}
