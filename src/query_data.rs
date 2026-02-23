@@ -1,13 +1,5 @@
-use bevy::{ecs::{bundle::Bundle, query::QueryData}, prelude::*};
-
-
-
 #[macro_export]
 macro_rules! query_data {
-    derive() ($visibility:vis struct $name:ident;) => {
-
-    };
-
     (if_mut mut {$($mut:tt)*} else {$($not_mut:tt)*}) => {
         $($mut)*
     };
@@ -146,50 +138,4 @@ macro_rules! query_data {
             &'static $field_type
         ),*
     };
-}
-
-#[derive(Default)]
-struct Transform2d {
-    translation: Vec2,
-    rotation: Rot2,
-    scale: Vec2,
-}
-
-trait MakeReference<const MUT: bool> {
-    type Output<'a>;
-}
-
-impl<T: 'static> MakeReference<true> for T {
-    type Output<'a> = &'a mut T;
-}
-impl<T: 'static> MakeReference<false> for T {
-    type Output<'a> = &'a T;
-}
-
-struct Transform2dItem<'a, const MUT: bool>(<Transform as MakeReference<MUT>>::Output<'a>) where Transform: MakeReference<MUT>;
-
-impl<'a> From<&'a Transform> for Transform2dItem<'a, false> {
-    fn from(value: &'a Transform) -> Self {
-        Self(value)
-    }
-}
-impl<'a> Transform2dItem<'a, false> {
-    fn from<'b>(value: Transform2dItem<'b, false>) -> Self where 'b: 'a {
-        Transform2dItem(value.0)
-    }
-}
-
-// I am using these to test that my my macro still works when used normally.
-//query_data!(Transform2d, &, (Transform));
-//query_data!(Transform2d, &mut, (Transform));
-
-query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Transform));
-
-fn tester(mut blah: Single<&Transform2d>, mut commands: Commands) {
-    let blah = &*blah;
-
-    // TODO: This won't currently compile, because I haven't gotten around to manually implementing Bundle.
-    // commands.spawn(Transform2d {
-    //     ..default()
-    // });
 }
