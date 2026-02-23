@@ -1,0 +1,26 @@
+[package]
+name = "schedule"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_window",
+    "bevy_sprite",
+    "bevy_sprite_render",
+    "bevy_winit",
+    "bevy_log",
+    "bevy_gizmos",
+    "bevy_gizmos_render",
+    "bevy_picking",
+    "bevy_asset",
+    "bevy_ui",
+    "bevy_ui_render",
+    "sprite_picking",
+    "bevy_picking",
+    "ui_picking",
+    "x11",
+    "dynamic_linking",
+    "debug",
+] }
+duck_back = "1.0.0"
