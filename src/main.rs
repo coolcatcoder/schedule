@@ -1,3 +1,5 @@
+#![feature(macro_derive)]
+
 // Spin a wheel to pick what task you must do. When completed you get a gem.
 // Gems can be used to purchase specific tasks, or re-roll.
 // All tasks, including 'fun' ones, like playing games, are on the wheel.
@@ -9,6 +11,7 @@ use bevy::{
     window::{WindowMode, WindowResolution},
 };
 
+mod bundle;
 mod query_data;
 mod spinner;
 mod transform_2d;

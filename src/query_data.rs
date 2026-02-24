@@ -1,3 +1,36 @@
+use bevy::ecs::query::QueryData;
+pub use crate::SimpleQueryData;
+
+pub trait SimpleQueryData<const MUT: bool> {
+    type Fetch: QueryData;
+    type Item<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(
+        item: Self::Item<'wlong>,
+    ) -> Self::Item<'wshort>;
+
+    fn fetch<'w, 's>(fetch: <Self::Fetch as QueryData>::Item<'w, 's>) -> Self::Item<'w>;
+
+    // unsafe fn fetch<'w, 's>(
+    //     state: &'s Self::State,
+    //     fetch: &mut Self::Fetch<'w>,
+    //     entity: Entity,
+    //     table_row: bevy::ecs::storage::TableRow,
+    // ) -> Option<Self::Item<'w, 's>> {
+    //     let fetch = unsafe { <$tuple as QueryData>::fetch(state, fetch, entity, table_row) };
+    //     fetch.map(|fetch| <$item as From<_>>::from(fetch))
+    // }
+}
+
+#[macro_export]
+macro_rules! SimpleQueryData {
+    derive() ($(#[$($any_attribute_before:tt)*])* $visibility:vis struct $name:ident $($any:tt)*) => {
+        $crate::query_data!(|internal| $name, &, <$name as $crate::query_data::SimpleQueryData<false>>::Item<'w>, <$name as $crate::query_data::SimpleQueryData<false>>::Fetch, shrink: <$name as $crate::query_data::SimpleQueryData<false>>::shrink, fetch: <$name as $crate::query_data::SimpleQueryData<false>>::fetch);
+        $crate::query_data!(|internal| $name, &mut, <$name as $crate::query_data::SimpleQueryData<true>>::Item<'w>, <$name as $crate::query_data::SimpleQueryData<true>>::Fetch, shrink: <$name as $crate::query_data::SimpleQueryData<true>>::shrink, fetch: <$name as $crate::query_data::SimpleQueryData<true>>::fetch);
+        //$crate::query_data!(|internal| $name, &mut, Transform2dItemMut<'w>, (&'static mut Transform));
+    };
+}
+
 #[macro_export]
 macro_rules! query_data {
     (if_mut mut {$($mut:tt)*} else {$($not_mut:tt)*}) => {
@@ -15,7 +48,7 @@ macro_rules! query_data {
         $crate::query_data!(|internal| $name, &, <($(&'static $field_type),*) as QueryData>::Item<'w, 's>, ($(&'static $field_type),*));
     };
 
-    (|internal| $name:ident, &$($ref:ident)?, $item:ty, $tuple:ty) => {
+    (|internal| $name:ident, &$($ref:ident)?, $item:ty, $tuple:ty, shrink: $shrink:expr, fetch: $fetch:expr) => {
         #[allow(unused_parens)]
         const _: () = {
             use bevy::ecs::query::{WorldQuery, QueryData};
@@ -107,7 +140,7 @@ macro_rules! query_data {
                 fn shrink<'wlong: 'wshort, 'wshort, 's>(
                     item: Self::Item<'wlong, 's>,
                 ) -> Self::Item<'wshort, 's> {
-                    Self::Item::<'wshort, 's>::from(item)
+                    $shrink(item)
                 }
 
                 unsafe fn fetch<'w, 's>(
@@ -117,7 +150,7 @@ macro_rules! query_data {
                     table_row: bevy::ecs::storage::TableRow,
                 ) -> Option<Self::Item<'w, 's>> {
                     let fetch = unsafe { <$tuple as QueryData>::fetch(state, fetch, entity, table_row) };
-                    fetch.map(|fetch| <$item as From<_>>::from(fetch))
+                    fetch.map(|fetch| $fetch(fetch))
                 }
 
                 fn iter_access(state: &Self::State) -> impl Iterator<Item = bevy::ecs::query::EcsAccessType<'_>> {

@@ -3,15 +3,87 @@ use std::{
     ptr::null_mut,
 };
 
-use bevy::{prelude::*, ptr::move_as_ptr};
+use bevy::prelude::*;
 
-use crate::query_data;
+use crate::{query_data::SimpleQueryData, bundle::SimpleBundle};
 
-#[derive(Default)]
+#[derive(Default, SimpleQueryData, SimpleBundle)]
 pub struct Transform2d {
     pub translation: Vec2,
     pub rotation: Rot2,
     pub scale: Vec2,
+}
+
+impl SimpleBundle for Transform2d {
+    type To = Transform;
+
+    fn get_components(self) -> Self::To {
+        Transform {
+            translation: self.translation.extend(0.),
+            rotation: Quat::from_rotation_z(self.rotation.as_degrees()),
+            scale: self.scale.extend(1.),
+        }
+    }
+}
+
+impl SimpleQueryData<false> for Transform2d {
+    type Fetch = &'static Transform;
+    type Item<'w> = Transform2dItem<'w, false>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(
+            item: Self::Item<'wlong>,
+        ) -> Self::Item<'wshort> {
+        Transform2dItem {
+            translation: item.translation,
+            rotation: item.rotation,
+            scale: item.scale,
+        }
+    }
+
+    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
+        Transform2dItem {
+            translation: ref_vec3_to_ref_vec2(&fetch.translation),
+            rotation: &fetch.rotation,
+            scale: ref_vec3_to_ref_vec2(&fetch.scale),
+        }
+    }
+}
+impl SimpleQueryData<true> for Transform2d {
+    type Fetch = &'static mut Transform;
+    type Item<'w> = Transform2dItemMut<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(
+            item: Self::Item<'wlong>,
+        ) -> Self::Item<'wshort> {
+        Transform2dItemMut(Transform2dItem {
+            translation: item.0.translation,
+            rotation: item.0.rotation,
+            scale: item.0.scale,
+        }, item.1)
+    }
+
+    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
+        // Bevy would not have to do this.
+        // I have to, due to not having access to the fields of Mut.
+        let mut stolen_value: *mut Transform = null_mut();
+        let change_detection = fetch.map_unchanged(|value| {
+            static mut WEIRD: &mut () = &mut ();
+
+            stolen_value = value;
+            // SAFETY: This is blatantly unsound. We just never ever access the value, and therefore hopefully it will be okay.
+            unsafe { WEIRD }
+        });
+        let value = unsafe { &mut *stolen_value };
+
+        Transform2dItemMut(
+            Transform2dItem {
+                translation: mut_vec3_to_mut_vec2(&mut value.translation),
+                rotation: &mut value.rotation,
+                scale: mut_vec3_to_mut_vec2(&mut value.scale),
+            },
+            change_detection,
+        )
+    }
 }
 
 pub trait MakeReference<const MUT: bool> {
@@ -73,135 +145,8 @@ fn ref_vec3_to_ref_vec2(value: &Vec3) -> &Vec2 {
     value
 }
 
-impl<'a> From<Mut<'a, Transform>> for Transform2dItemMut<'a> {
-    fn from(value: Mut<'a, Transform>) -> Self {
-        // Bevy would not have to do this.
-        // I have to, due to not having access to the fields of Mut.
-        let mut stolen_value: *mut Transform = null_mut();
-        let change_detection = value.map_unchanged(|value| {
-            static mut WEIRD: &mut () = &mut ();
-
-            stolen_value = value;
-            // SAFETY: This is blatantly unsound. We just never ever access the value, and therefore hopefully it will be okay.
-            unsafe { WEIRD }
-        });
-        let value = unsafe { &mut *stolen_value };
-
-        Self(
-            Transform2dItem {
-                translation: mut_vec3_to_mut_vec2(&mut value.translation),
-                rotation: &mut value.rotation,
-                scale: mut_vec3_to_mut_vec2(&mut value.scale),
-            },
-            change_detection,
-        )
-    }
-}
-
 impl<'a> Transform2dItemMut<'a> {
-    fn from<'b>(value: Transform2dItemMut<'b>) -> Transform2dItemMut<'a>
-    where
-        'b: 'a,
-    {
-        Transform2dItemMut(
-            Transform2dItem {
-                translation: value.0.translation,
-                rotation: value.0.rotation,
-                scale: value.0.scale,
-            },
-            value.1,
-        )
-    }
-
     pub fn is_changed(&self) -> bool {
         self.1.is_changed()
-    }
-}
-
-impl<'a> From<&'a Transform> for Transform2dItem<'a, false> {
-    fn from(value: &'a Transform) -> Self {
-        Self {
-            translation: ref_vec3_to_ref_vec2(&value.translation),
-            rotation: &value.rotation,
-            scale: ref_vec3_to_ref_vec2(&value.scale),
-        }
-    }
-}
-
-impl<'a> Transform2dItem<'a, false> {
-    fn from<'b>(value: Transform2dItem<'b, false>) -> Self
-    where
-        'b: 'a,
-    {
-        Transform2dItem {
-            translation: value.translation,
-            rotation: value.rotation,
-            scale: value.scale,
-        }
-    }
-}
-
-query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Transform));
-query_data!(|internal| Transform2d, &mut, Transform2dItemMut<'w>, (&'static mut Transform));
-
-unsafe impl ::bevy::ecs::bundle::Bundle for Transform2d {
-    fn component_ids(
-        components: &mut ::bevy::ecs::component::ComponentsRegistrator,
-    ) -> impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<> {
-        core::iter::empty().chain(<Transform as ::bevy::ecs::bundle::Bundle>::component_ids(
-            components,
-        ))
-    }
-    fn get_component_ids(
-        components: &::bevy::ecs::component::Components,
-    ) -> impl Iterator<Item = Option<::bevy::ecs::component::ComponentId>> {
-        core::iter::empty()
-            .chain(<Transform as ::bevy::ecs::bundle::Bundle>::get_component_ids(components))
-    }
-}
-unsafe impl ::bevy::ecs::bundle::BundleFromComponents for Transform2d {
-    #[allow(unused_variables, non_snake_case)]
-    unsafe fn from_components<__T, __F>(ctx: &mut __T, func: &mut __F) -> Self
-    where
-        __F: FnMut(&mut __T) -> ::bevy::ecs::ptr::OwningPtr<'_>,
-    {
-        let transform = unsafe {
-            <Transform as ::bevy::ecs::bundle::BundleFromComponents>::from_components(
-                ctx, &mut *func,
-            )
-        };
-        Self {
-            translation: transform.translation.xy(),
-            rotation: Rot2::radians(transform.rotation.to_euler(EulerRot::XYZ).2),
-            scale: transform.scale.xy(),
-        }
-    }
-}
-impl ::bevy::ecs::bundle::DynamicBundle for Transform2d {
-    type Effect = ();
-    #[allow(unused_variables)]
-    #[inline]
-    unsafe fn get_components(
-        ptr: ::bevy::ecs::ptr::MovingPtr<'_, Self>,
-        func: &mut impl FnMut(::bevy::ecs::component::StorageType, ::bevy::ecs::ptr::OwningPtr<'_>),
-    ) {
-        let value = ptr.read();
-        let transform = Transform {
-            translation: value.translation.extend(0.),
-            rotation: Quat::from_rotation_z(value.rotation.as_degrees()),
-            scale: value.scale.extend(1.),
-        };
-        move_as_ptr!(transform);
-
-        unsafe {
-            <Transform as ::bevy::ecs::bundle::DynamicBundle>::get_components(transform, func)
-        };
-    }
-    #[allow(unused_variables)]
-    #[inline]
-    unsafe fn apply_effect(
-        ptr: ::bevy::ecs::ptr::MovingPtr<'_, core::mem::MaybeUninit<Self>>,
-        func: &mut ::bevy::ecs::world::EntityWorldMut<'_>,
-    ) {
     }
 }
