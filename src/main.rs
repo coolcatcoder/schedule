@@ -9,9 +9,9 @@ use bevy::{
     window::{WindowMode, WindowResolution},
 };
 
-mod transform_2d;
 mod query_data;
 mod spinner;
+mod transform_2d;
 use spinner::*;
 
 use crate::transform_2d::Transform2d;
@@ -75,17 +75,24 @@ fn start(mut commands: Commands) {
         }),
     ));
 
-    commands.spawn((Transform2d {
-        translation: Vec2::new(2.3, 9.8),
-        rotation: Rot2::IDENTITY,
-        scale: Vec2::ONE,
-    }, Marker));
+    commands.spawn((
+        Transform2d {
+            translation: Vec2::new(2.3, 9.8),
+            rotation: Rot2::IDENTITY,
+            scale: Vec2::ONE,
+        },
+        Marker,
+    ));
 }
 
 #[derive(Component)]
 struct Marker;
 
-fn rotate(mut gradient: Single<&mut BackgroundGradient>, time: Res<Time>, mut bad: Single<&mut Transform2d, With<Marker>>) {
+fn rotate(
+    mut gradient: Single<&mut BackgroundGradient>,
+    time: Res<Time>,
+    mut bad: Single<&mut Transform2d, With<Marker>>,
+) {
     let Gradient::Conic(gradient) = &mut gradient.0[0] else {
         error!("Failed to get gradient.");
         return;

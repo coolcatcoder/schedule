@@ -23,7 +23,7 @@ macro_rules! query_data {
 
             $crate::query_data! {
                 if_mut $($ref)? {
-                    
+
                 } else {
                     unsafe impl bevy::ecs::query::ReadOnlyQueryData for &$name {}
                 }

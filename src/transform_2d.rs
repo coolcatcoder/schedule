@@ -1,9 +1,11 @@
-use std::{ops::{Deref, DerefMut}, ptr::null_mut};
+use std::{
+    ops::{Deref, DerefMut},
+    ptr::null_mut,
+};
 
 use bevy::{prelude::*, ptr::move_as_ptr};
 
 use crate::query_data;
-
 
 #[derive(Default)]
 pub struct Transform2d {
@@ -17,24 +19,26 @@ pub trait MakeReference<const MUT: bool> {
 }
 
 impl<T: 'static> MakeReference<true> for T {
-    type Output<'a> = Mut<'a, T>;
+    type Output<'a> = &'a mut T;
 }
 impl<T: 'static> MakeReference<false> for T {
     type Output<'a> = &'a T;
 }
 
-pub struct Transform2dItem<'a, const MUT: bool>(pub <Transform as MakeReference<MUT>>::Output<'a>) where Transform: MakeReference<MUT>;
-
-pub struct Transform2dItemMutInner<'a> {
-    pub translation: &'a mut Vec2,
-    pub rotation: &'a mut Quat,
-    pub scale: &'a mut Vec2,
+pub struct Transform2dItem<'a, const MUT: bool>
+where
+    Vec2: MakeReference<MUT>,
+    Quat: MakeReference<MUT>,
+{
+    pub translation: <Vec2 as MakeReference<MUT>>::Output<'a>,
+    pub rotation: <Quat as MakeReference<MUT>>::Output<'a>,
+    pub scale: <Vec2 as MakeReference<MUT>>::Output<'a>,
 }
 
-pub struct Transform2dItemMut<'a>(Transform2dItemMutInner<'a>, Mut<'a, ()>);
+pub struct Transform2dItemMut<'a>(Transform2dItem<'a, true>, Mut<'a, ()>);
 
 impl<'a> Deref for Transform2dItemMut<'a> {
-    type Target = Transform2dItemMutInner<'a>;
+    type Target = Transform2dItem<'a, true>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -49,7 +53,7 @@ impl<'a> DerefMut for Transform2dItemMut<'a> {
     }
 }
 
-fn vec3_to_vec2(value: &mut Vec3) -> &mut Vec2 {
+fn mut_vec3_to_mut_vec2(value: &mut Vec3) -> &mut Vec2 {
     let value: &mut [f32; 3] = value.as_mut();
     let value: *mut [f32; 3] = value;
     let value: *mut [f32; 2] = value as *mut [f32; 2];
@@ -59,6 +63,15 @@ fn vec3_to_vec2(value: &mut Vec3) -> &mut Vec2 {
     value
 }
 
+fn ref_vec3_to_ref_vec2(value: &Vec3) -> &Vec2 {
+    let value: &[f32; 3] = value.as_ref();
+    let value: *const [f32; 3] = value;
+    let value: *const [f32; 2] = value as *const [f32; 2];
+    let value: *const Vec2 = value as *const Vec2;
+    // SAFETY: Miri allows it.
+    let value: &Vec2 = unsafe { &*value };
+    value
+}
 
 impl<'a> From<Mut<'a, Transform>> for Transform2dItemMut<'a> {
     fn from(value: Mut<'a, Transform>) -> Self {
@@ -74,17 +87,30 @@ impl<'a> From<Mut<'a, Transform>> for Transform2dItemMut<'a> {
         });
         let value = unsafe { &mut *stolen_value };
 
-        Self(Transform2dItemMutInner {
-            translation: vec3_to_vec2(&mut value.translation),
-            rotation: &mut value.rotation,
-            scale: vec3_to_vec2(&mut value.scale),
-        }, change_detection)
+        Self(
+            Transform2dItem {
+                translation: mut_vec3_to_mut_vec2(&mut value.translation),
+                rotation: &mut value.rotation,
+                scale: mut_vec3_to_mut_vec2(&mut value.scale),
+            },
+            change_detection,
+        )
     }
 }
 
 impl<'a> Transform2dItemMut<'a> {
-    fn from<'b>(value: Transform2dItemMut<'b>) -> Self where 'b: 'a {
-        Transform2dItemMut(value.0, value.1)
+    fn from<'b>(value: Transform2dItemMut<'b>) -> Transform2dItemMut<'a>
+    where
+        'b: 'a,
+    {
+        Transform2dItemMut(
+            Transform2dItem {
+                translation: value.0.translation,
+                rotation: value.0.rotation,
+                scale: value.0.scale,
+            },
+            value.1,
+        )
     }
 
     pub fn is_changed(&self) -> bool {
@@ -92,53 +118,31 @@ impl<'a> Transform2dItemMut<'a> {
     }
 }
 
-// impl<'a> Deref for Transform2dItem<'a, false> {
-//     type Target = Bad<'a>;
-
-//     fn deref(&self) -> &Self::Target {
-//         &Bad {
-//             x: &self.0.translation.x,
-//             y: &self.0.translation.y,
-//             rotation: &self.0.rotation,
-//         }
-//     }
-// }
-
 impl<'a> From<&'a Transform> for Transform2dItem<'a, false> {
     fn from(value: &'a Transform) -> Self {
-        Self(value)
-    }
-}
-impl<'a> From<Mut<'a, Transform>> for Transform2dItem<'a, true> {
-    fn from(value: Mut<'a, Transform>) -> Self {
-        Self(value)
+        Self {
+            translation: ref_vec3_to_ref_vec2(&value.translation),
+            rotation: &value.rotation,
+            scale: ref_vec3_to_ref_vec2(&value.scale),
+        }
     }
 }
 
 impl<'a> Transform2dItem<'a, false> {
-    fn from<'b>(value: Transform2dItem<'b, false>) -> Self where 'b: 'a {
-        Transform2dItem(value.0)
-    }
-}
-impl<'a> Transform2dItem<'a, true> {
-    fn from<'b>(value: Transform2dItem<'b, true>) -> Self where 'b: 'a {
-        Transform2dItem(value.0)
+    fn from<'b>(value: Transform2dItem<'b, false>) -> Self
+    where
+        'b: 'a,
+    {
+        Transform2dItem {
+            translation: value.translation,
+            rotation: value.rotation,
+            scale: value.scale,
+        }
     }
 }
 
 query_data!(|internal| Transform2d, &, Transform2dItem<'w, false>, (&'static Transform));
-//query_data!(|internal| Transform2d, &mut, Transform2dItem<'w, true>, (&'static mut Transform));
 query_data!(|internal| Transform2d, &mut, Transform2dItemMut<'w>, (&'static mut Transform));
-
-fn tester(mut blah: Single<&Transform2d>, mut commands: Commands) {
-    let blah = &*blah;
-
-    commands.spawn(Transform2d {
-        translation: Vec2::new(2.3, 9.8),
-        rotation: Rot2::IDENTITY,
-        scale: Vec2::ONE,
-    });
-}
 
 unsafe impl ::bevy::ecs::bundle::Bundle for Transform2d {
     fn component_ids(
@@ -161,8 +165,16 @@ unsafe impl ::bevy::ecs::bundle::BundleFromComponents for Transform2d {
     where
         __F: FnMut(&mut __T) -> ::bevy::ecs::ptr::OwningPtr<'_>,
     {
-        let transform = unsafe { <Transform as ::bevy::ecs::bundle::BundleFromComponents>::from_components(ctx, &mut *func,) };
-        Self { translation: transform.translation.xy(), rotation: todo!(), scale: transform.scale.xy() }
+        let transform = unsafe {
+            <Transform as ::bevy::ecs::bundle::BundleFromComponents>::from_components(
+                ctx, &mut *func,
+            )
+        };
+        Self {
+            translation: transform.translation.xy(),
+            rotation: Rot2::radians(transform.rotation.to_euler(EulerRot::XYZ).2),
+            scale: transform.scale.xy(),
+        }
     }
 }
 impl ::bevy::ecs::bundle::DynamicBundle for Transform2d {
@@ -181,7 +193,9 @@ impl ::bevy::ecs::bundle::DynamicBundle for Transform2d {
         };
         move_as_ptr!(transform);
 
-        unsafe { <Transform as ::bevy::ecs::bundle::DynamicBundle>::get_components(transform, func) };
+        unsafe {
+            <Transform as ::bevy::ecs::bundle::DynamicBundle>::get_components(transform, func)
+        };
     }
     #[allow(unused_variables)]
     #[inline]
