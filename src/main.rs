@@ -1,4 +1,6 @@
 #![feature(macro_derive)]
+#![feature(impl_trait_in_assoc_type)]
+//#![feature(trace_macros)]
 
 // Spin a wheel to pick what task you must do. When completed you get a gem.
 // Gems can be used to purchase specific tasks, or re-roll.
@@ -36,47 +38,7 @@ fn main() {
 fn start(mut commands: Commands) {
     commands.spawn(Camera2d);
 
-    let colour_order = [RED, BLUE, GREEN, YELLOW];
-    let amount = 40;
-
-    let degrees_per_slice = 360. / amount as f32;
-    let stops = (0..amount)
-        .flat_map(|index| {
-            let start = degrees_per_slice * index as f32;
-            let end = (start + degrees_per_slice).to_radians();
-            let colour = colour_order[index % colour_order.len()].into();
-
-            let slice = AngularColorStop {
-                color: colour,
-                angle: Some(start.to_radians()),
-                hint: end,
-            };
-            let avoid_blend = AngularColorStop {
-                color: colour,
-                angle: Some(end),
-                hint: end,
-            };
-
-            [slice, avoid_blend]
-        })
-        .collect();
-
-    commands.spawn((
-        Node {
-            height: percent(95),
-            aspect_ratio: Some(1.),
-            border_radius: BorderRadius::MAX,
-            justify_self: JustifySelf::Center,
-            align_self: AlignSelf::Center,
-            ..default()
-        },
-        BackgroundGradient::from(ConicGradient {
-            start: 0.,
-            stops,
-            position: UiPosition::CENTER,
-            ..default()
-        }),
-    ));
+    commands.spawn(Spinner(["a"; 10]));
 
     commands.spawn((
         Transform2d {

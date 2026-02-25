@@ -6,28 +6,36 @@ pub trait SimpleBundle {
     fn get_components(self) -> Self::To;
 }
 
-#[derive(SimpleBundle)]
-struct Tester;
-
-impl SimpleBundle for Tester {
-    type To = (bevy::prelude::Transform, bevy::prelude::Sprite);
-
-    fn get_components(self) -> Self::To {
-        todo!()
-    }
-}
-
 #[macro_export]
 macro_rules! SimpleBundle {
-    derive() ($(#[$($any_attribute:tt)*])* $visibility:vis struct $name:ident $($_:tt)*) => {
-        SimpleBundle!(|internal| self_type: $name, to_type: <$name as $crate::bundle::SimpleBundle>::To);
+    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty),*> $($__:tt)*) => {
+        SimpleBundle!(|internal| self_type: $name<$($crate::bundle::SimpleBundle!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*>, to_type: <$name<$($crate::bundle::SimpleBundle!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*> as $crate::bundle::SimpleBundle>::To, impl_generics: ($($(const $const_generic_ident:)? $generic_type),*), component_ids_return_type: $crate::bundle::SimpleBundle!(|construct| input: ($($(const $const_generic_ident:)? $generic_type,)*), output: (impl Iterator<Item = ::bevy::ecs::component::ComponentId>)));
+    };
+    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident $($__:tt)*) => {
+        SimpleBundle!(|internal| self_type: $name, to_type: <$name as $crate::bundle::SimpleBundle>::To, impl_generics: , component_ids_return_type: impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<>);
     };
 
-    (|internal| self_type: $self_type:ty, to_type: $to_type:ty) => {
-        unsafe impl ::bevy::ecs::bundle::Bundle for $self_type {
+    (|construct| input: (const $const_generic_ident:ident: $const_generic_type:ty, $($input:tt)*), output: ($($output:tt)*)) => {
+        $crate::bundle::SimpleBundle!(|construct| input: ($($input)*), output: ($($output)* + use<$const_generic_ident>))
+    };
+
+    (|construct| input: (), output: ($($output:tt)*)) => {
+        $($output)*
+    };
+
+    (|generic_get_ident| generic: const $const_generic_ident:ident: $const_generic_type:ty) => {
+        $const_generic_ident
+    };
+
+    (|generic_get_use| generic: const $const_generic_ident:ident: $const_generic_type:ty) => {
+        use<$const_generic_ident>
+    };
+
+    (|internal| self_type: $self_type:ty, to_type: $to_type:ty, impl_generics: $(($($impl_generics:tt)*))?, component_ids_return_type: $($component_ids_return_type:tt)*) => {
+        unsafe impl$(<$($impl_generics)*>)? ::bevy::ecs::bundle::Bundle for $self_type {
             fn component_ids(
                 components: &mut ::bevy::ecs::component::ComponentsRegistrator,
-            ) -> impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<> {
+            ) -> $($component_ids_return_type)* {
                 <$to_type as ::bevy::ecs::bundle::Bundle>::component_ids(components)
             }
 
@@ -37,26 +45,8 @@ macro_rules! SimpleBundle {
                 <$to_type as ::bevy::ecs::bundle::Bundle>::get_component_ids(components)
             }
         }
-        // unsafe impl ::bevy::ecs::bundle::BundleFromComponents for $self_type {
-        //     #[allow(unused_variables, non_snake_case)]
-        //     unsafe fn from_components<__T, __F>(ctx: &mut __T, func: &mut __F) -> Self
-        //     where
-        //         __F: FnMut(&mut __T) -> ::bevy::ecs::ptr::OwningPtr<'_>,
-        //     {
-        //         let components = <$to_type as ::bevy::ecs::bundle::BundleFromComponents>::from_components(ctx, &mut *func);
-        //         let transform = unsafe {
-        //             <Transform as ::bevy::ecs::bundle::BundleFromComponents>::from_components(
-        //                 ctx, &mut *func,
-        //             )
-        //         };
-        //         Self {
-        //             translation: transform.translation.xy(),
-        //             rotation: Rot2::radians(transform.rotation.to_euler(EulerRot::XYZ).2),
-        //             scale: transform.scale.xy(),
-        //         }
-        //     }
-        // }
-        impl ::bevy::ecs::bundle::DynamicBundle for $self_type {
+
+        impl$(<$($impl_generics)*>)? ::bevy::ecs::bundle::DynamicBundle for $self_type {
             type Effect = ();
             #[allow(unused_variables)]
             #[inline]

@@ -5,7 +5,7 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::{query_data::SimpleQueryData, bundle::SimpleBundle};
+use crate::{bundle::SimpleBundle, query_data::SimpleQueryData};
 
 #[derive(Default, SimpleQueryData, SimpleBundle)]
 pub struct Transform2d {
@@ -30,9 +30,7 @@ impl SimpleQueryData<false> for Transform2d {
     type Fetch = &'static Transform;
     type Item<'w> = Transform2dItem<'w, false>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(
-            item: Self::Item<'wlong>,
-        ) -> Self::Item<'wshort> {
+    fn shrink<'wlong: 'wshort, 'wshort>(item: Self::Item<'wlong>) -> Self::Item<'wshort> {
         Transform2dItem {
             translation: item.translation,
             rotation: item.rotation,
@@ -40,7 +38,9 @@ impl SimpleQueryData<false> for Transform2d {
         }
     }
 
-    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
+    fn fetch<'w, 's>(
+        fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>,
+    ) -> Self::Item<'w> {
         Transform2dItem {
             translation: ref_vec3_to_ref_vec2(&fetch.translation),
             rotation: &fetch.rotation,
@@ -52,17 +52,20 @@ impl SimpleQueryData<true> for Transform2d {
     type Fetch = &'static mut Transform;
     type Item<'w> = Transform2dItemMut<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(
-            item: Self::Item<'wlong>,
-        ) -> Self::Item<'wshort> {
-        Transform2dItemMut(Transform2dItem {
-            translation: item.0.translation,
-            rotation: item.0.rotation,
-            scale: item.0.scale,
-        }, item.1)
+    fn shrink<'wlong: 'wshort, 'wshort>(item: Self::Item<'wlong>) -> Self::Item<'wshort> {
+        Transform2dItemMut(
+            Transform2dItem {
+                translation: item.0.translation,
+                rotation: item.0.rotation,
+                scale: item.0.scale,
+            },
+            item.1,
+        )
     }
 
-    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
+    fn fetch<'w, 's>(
+        fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>,
+    ) -> Self::Item<'w> {
         // Bevy would not have to do this.
         // I have to, due to not having access to the fields of Mut.
         let mut stolen_value: *mut Transform = null_mut();
