@@ -1,17 +1,13 @@
 #![feature(macro_derive)]
 #![feature(impl_trait_in_assoc_type)]
-//#![feature(trace_macros)]
+#![feature(trace_macros)]
 
 // Spin a wheel to pick what task you must do. When completed you get a gem.
 // Gems can be used to purchase specific tasks, or re-roll.
 // All tasks, including 'fun' ones, like playing games, are on the wheel.
 // 'fun' ones are just less likely.
 // Perhaps wave function collapse to ensure tasks get completed one one of the rolls of that day.
-use bevy::{
-    color::palettes::css::{BLUE, GREEN, LIGHT_BLUE, NAVY, RED, YELLOW},
-    prelude::*,
-    window::{WindowMode, WindowResolution},
-};
+use bevy::prelude::*;
 
 mod bundle;
 mod query_data;

@@ -5,8 +5,7 @@ use bevy::{
 };
 
 const COLOUR_ORDER: [Srgba; 4] = [RED, BLUE, GREEN, YELLOW];
-
-#[derive(SimpleBundle)]
+#[derive(SimpleBundle, SimpleQueryData)]
 pub struct Spinner<const LENGTH: usize>(pub [&'static str; LENGTH]);
 
 impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
@@ -61,6 +60,18 @@ impl<const LENGTH: usize> SimpleQueryData<false> for Spinner<LENGTH> {
     fn fetch<'w, 's>(
         fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>,
     ) -> Self::Item<'w> {
+        fetch
+    }
+
+    fn shrink<'wlong: 'wshort, 'wshort>(item: Self::Item<'wlong>) -> Self::Item<'wshort> {
+        item
+    }
+}
+impl<const LENGTH: usize> SimpleQueryData<true> for Spinner<LENGTH> {
+    type Fetch = &'static mut BackgroundGradient;
+    type Item<'w> = Mut<'w, BackgroundGradient>;
+
+    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
         fetch
     }
 
