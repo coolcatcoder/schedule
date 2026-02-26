@@ -12,7 +12,7 @@ pub trait SimpleQueryData<const MUT: bool> {
 
 #[macro_export]
 macro_rules! SimpleQueryData {
-    derive() ($(#[$_:meta])* $__:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty),*> $($___:tt)*) => {
+    derive() ($(#[$_:meta])* $__:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty $(= $default:tt)?),*> $($___:tt)*) => {
         $crate::query_data::SimpleQueryData!(|1: Process Generics|
             remaining_generics_to_check($($(const $const_generic_ident:)? $generic_type,)*),
             self_type($name<),

@@ -8,7 +8,7 @@ pub trait SimpleBundle {
 
 #[macro_export]
 macro_rules! SimpleBundle {
-    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty),*> $($__:tt)*) => {
+    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty $(= $default:tt)?),*> $($__:tt)*) => {
         SimpleBundle!(|internal| self_type: $name<$($crate::bundle::SimpleBundle!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*>, to_type: <$name<$($crate::bundle::SimpleBundle!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*> as $crate::bundle::SimpleBundle>::To, impl_generics: ($($(const $const_generic_ident:)? $generic_type),*), component_ids_return_type: $crate::bundle::SimpleBundle!(|construct| input: ($($(const $const_generic_ident:)? $generic_type,)*), output: (impl Iterator<Item = ::bevy::ecs::component::ComponentId>)));
     };
     derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident $($__:tt)*) => {
@@ -68,6 +68,10 @@ macro_rules! SimpleBundle {
                 ptr: ::bevy::ecs::ptr::MovingPtr<'_, core::mem::MaybeUninit<Self>>,
                 func: &mut ::bevy::ecs::world::EntityWorldMut<'_>,
             ) {
+                info!("test");
+                // ::bevy::ecs::ptr::deconstruct_moving_ptr!({
+                //     let core::mem::MaybeUninit::<Self> {}
+                // });
             }
         }
     };

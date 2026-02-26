@@ -1,12 +1,25 @@
 use crate::{bundle::SimpleBundle, query_data::SimpleQueryData};
 use bevy::{
-    color::palettes::css::{BLUE, GREEN, RED, YELLOW},
-    prelude::*,
+    color::palettes::css::{BLUE, GREEN, RED, YELLOW}, ecs::{lifecycle::HookContext, world::DeferredWorld}, prelude::*
 };
+use duck_back::Else;
+
+#[derive(Component)]
+#[component(on_add = Self::on_add)]
+pub struct TextFontLoad(pub &'static str);
+
+impl TextFontLoad {
+    fn on_add(mut world: DeferredWorld, context: HookContext) {
+        panic!("?");
+        let font = world.entity(context.entity).get::<Self>().else_error()?.0;
+        let font = world.resource::<AssetServer>().load(font);
+        world.entity_mut(context.entity).get_mut::<TextFont>().else_error()?.font = font;
+    }
+}
 
 const COLOUR_ORDER: [Srgba; 4] = [RED, BLUE, GREEN, YELLOW];
 #[derive(SimpleBundle, SimpleQueryData)]
-pub struct Spinner<const LENGTH: usize>(pub [&'static str; LENGTH]);
+pub struct Spinner<const LENGTH: usize = 0>(pub [&'static str; LENGTH]);
 
 impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
     type To = impl Bundle;
@@ -49,6 +62,14 @@ impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
                 position: UiPosition::CENTER,
                 ..default()
             }),
+            children![
+                Text::new("Tester. Let us see."),
+                TextFont {
+                    font_size: 50.,
+                    ..default()
+                },
+                TextFontLoad("domine_regular.ttf"),
+            ],
         )
     }
 }
@@ -79,3 +100,7 @@ impl<const LENGTH: usize> SimpleQueryData<true> for Spinner<LENGTH> {
         item
     }
 }
+
+#[derive(Bundle)]
+#[bundle(ignore_from_components)]
+pub struct Hope(pub bevy::ecs::spawn::SpawnRelatedBundle<bevy::prelude::ChildOf, bevy::prelude::Spawn<TextFontLoad>>);

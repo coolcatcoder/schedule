@@ -7,7 +7,7 @@
 // All tasks, including 'fun' ones, like playing games, are on the wheel.
 // 'fun' ones are just less likely.
 // Perhaps wave function collapse to ensure tasks get completed one one of the rolls of that day.
-use bevy::prelude::*;
+use bevy::{ecs::{lifecycle::HookContext, spawn::SpawnRelatedBundle, world::DeferredWorld}, prelude::*};
 
 mod bundle;
 mod query_data;
@@ -27,7 +27,7 @@ fn main() {
             ..default()
         }))
         .add_systems(Startup, start)
-        .add_systems(Update, (rotate, tester))
+        .add_systems(Update, rotate)
         .run();
 }
 
@@ -35,6 +35,9 @@ fn start(mut commands: Commands) {
     commands.spawn(Camera2d);
 
     commands.spawn(Spinner(["a"; 10]));
+
+    commands.spawn(Hope(children![TextFontLoad("domine_regular.ttf")]));
+    //commands.spawn(TextFontLoad("domine_regular.ttf"));
 
     commands.spawn((
         Transform2d {
@@ -44,27 +47,38 @@ fn start(mut commands: Commands) {
         },
         Marker,
     ));
+
+    // Min debugging:
+
+    #[derive(Component)]
+    #[component(on_add = Self::on_add)]
+    struct Panic;
+    impl Panic {
+        fn on_add(_: DeferredWorld, _: HookContext) {
+            panic!();
+        }
+    }
+
+    #[derive(Bundle)]
+    #[bundle(ignore_from_components)]
+    struct Tester(SpawnRelatedBundle<ChildOf, Spawn<Panic>>);
+
+    commands.spawn(Tester(children![Panic]));
 }
 
 #[derive(Component)]
 struct Marker;
 
 fn rotate(
-    mut gradient: Single<&mut BackgroundGradient>,
+    mut gradient: Single<(&mut Spinner, &mut UiTransform)>,
     time: Res<Time>,
-    mut bad: Single<&mut Transform2d, With<Marker>>,
 ) {
-    let Gradient::Conic(gradient) = &mut gradient.0[0] else {
-        error!("Failed to get gradient.");
-        return;
-    };
+    // let Gradient::Conic(gradient) = &mut gradient.0.0[0] else {
+    //     error!("Failed to get gradient.");
+    //     return;
+    // };
 
-    gradient.start = (gradient.start.to_degrees() + 25. * time.delta_secs()).to_radians();
+    // gradient.start = (gradient.start.to_degrees() + 25. * time.delta_secs()).to_radians();
 
-    info!("{}", bad.translation);
-    bad.translation.x += 1.;
-}
-
-fn tester(bad: Single<&mut Transform2d, With<Marker>>) {
-    info!("{}", bad.is_changed());
+    gradient.1.rotation = Rot2::degrees(gradient.1.rotation.as_degrees() + 25. * time.delta_secs());
 }
