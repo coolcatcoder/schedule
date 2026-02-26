@@ -5,24 +5,32 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::{bundle::SimpleBundle, query_data::SimpleQueryData};
+use crate::{bundle::BundleEffect, query_data::SimpleQueryData};
 
-#[derive(Default, SimpleQueryData, SimpleBundle)]
+#[derive(SimpleQueryData, BundleEffect)]
 pub struct Transform2d {
     pub translation: Vec2,
     pub rotation: Rot2,
     pub scale: Vec2,
 }
 
-impl SimpleBundle for Transform2d {
-    type To = Transform;
+impl Default for Transform2d {
+    fn default() -> Self {
+        Self {
+            translation: Vec2::ZERO,
+            rotation: Rot2::IDENTITY,
+            scale: Vec2::ONE,
+        }
+    }
+}
 
-    fn get_components(self) -> Self::To {
-        Transform {
+impl BundleEffect for Transform2d {
+    fn effect(self, entity_world: &mut EntityWorldMut) {
+        entity_world.insert(Transform {
             translation: self.translation.extend(0.),
             rotation: Quat::from_rotation_z(self.rotation.as_degrees()),
             scale: self.scale.extend(1.),
-        }
+        });
     }
 }
 

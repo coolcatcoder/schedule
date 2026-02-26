@@ -19,6 +19,8 @@ bevy = { version = "0.18", default-features = false, features = [
     "sprite_picking",
     "bevy_picking",
     "ui_picking",
+    "experimental_bevy_ui_widgets",
+    "bevy_input_focus",
     "x11",
     "dynamic_linking",
     "debug",

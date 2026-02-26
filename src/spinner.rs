@@ -1,30 +1,19 @@
-use crate::{bundle::SimpleBundle, query_data::SimpleQueryData};
+use crate::{bundle::BundleEffect, query_data::SimpleQueryData, transform_2d::Transform2d};
 use bevy::{
-    color::palettes::css::{BLUE, GREEN, RED, YELLOW}, ecs::{lifecycle::HookContext, world::DeferredWorld}, prelude::*
+    color::palettes::css::{BLUE, GREEN, RED, YELLOW},
+    prelude::*,
 };
-use duck_back::Else;
-
-#[derive(Component)]
-#[component(on_add = Self::on_add)]
-pub struct TextFontLoad(pub &'static str);
-
-impl TextFontLoad {
-    fn on_add(mut world: DeferredWorld, context: HookContext) {
-        panic!("?");
-        let font = world.entity(context.entity).get::<Self>().else_error()?.0;
-        let font = world.resource::<AssetServer>().load(font);
-        world.entity_mut(context.entity).get_mut::<TextFont>().else_error()?.font = font;
-    }
-}
 
 const COLOUR_ORDER: [Srgba; 4] = [RED, BLUE, GREEN, YELLOW];
-#[derive(SimpleBundle, SimpleQueryData)]
+#[derive(BundleEffect, SimpleQueryData)]
 pub struct Spinner<const LENGTH: usize = 0>(pub [&'static str; LENGTH]);
 
-impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
-    type To = impl Bundle;
+impl<const LENGTH: usize> BundleEffect for Spinner<LENGTH> {
+    fn effect(self, entity_world: &mut EntityWorldMut) {
+        let font = entity_world
+            .resource::<AssetServer>()
+            .load("domine_regular.ttf");
 
-    fn get_components(self) -> Self::To {
         let degrees_per_slice = 360. / LENGTH as f32;
         let stops = (0..LENGTH)
             .flat_map(|index| {
@@ -47,13 +36,14 @@ impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
             })
             .collect();
 
-        (
+        entity_world.insert((
             Node {
                 height: percent(95),
                 aspect_ratio: Some(1.),
                 border_radius: BorderRadius::MAX,
                 justify_self: JustifySelf::Center,
                 align_self: AlignSelf::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
             BackgroundGradient::from(ConicGradient {
@@ -62,15 +52,67 @@ impl<const LENGTH: usize> SimpleBundle for Spinner<LENGTH> {
                 position: UiPosition::CENTER,
                 ..default()
             }),
-            children![
-                Text::new("Tester. Let us see."),
-                TextFont {
-                    font_size: 50.,
+        ));
+
+        entity_world.with_child((
+            Node {
+                width: percent(100),
+                height: percent(100),
+                position_type: PositionType::Absolute,
+
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            UiTransform {
+                rotation: Rot2::degrees(degrees_per_slice * 0.5),
+                ..default()
+            },
+            children![(
+                Node {
+                    width: px(250),
+                    height: px(250),
+                    bottom: percent(35),
+
+                    //align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                     ..default()
                 },
-                TextFontLoad("domine_regular.ttf"),
-            ],
-        )
+                //BackgroundColor(BLUE.into()),
+                GlobalZIndex(1),
+                children![(
+                    Text::new("Play games for 1 hour!"),
+                    TextFont {
+                        font,
+                        font_size: 30.,
+                        ..default()
+                    },
+                )],
+            )],
+        ));
+
+        entity_world.world_scope(|world: &mut World| {
+            //world.spawn();
+            // world.spawn((
+            //     Node {
+            //         left: percent(50),
+
+            //         align_items: AlignItems::Center,
+            //         justify_content: JustifyContent::Center,
+            //         ..default()
+            //     },
+            //     BackgroundColor(BLUE.into()),
+            //     GlobalZIndex(1),
+            //     children![(
+            //         Text::new("Tester. Let us see."),
+            //         TextFont {
+            //             font,
+            //             font_size: 30.,
+            //             ..default()
+            //         },
+            //     )],
+            // ));
+        });
     }
 }
 
@@ -92,7 +134,9 @@ impl<const LENGTH: usize> SimpleQueryData<true> for Spinner<LENGTH> {
     type Fetch = &'static mut BackgroundGradient;
     type Item<'w> = Mut<'w, BackgroundGradient>;
 
-    fn fetch<'w, 's>(fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>) -> Self::Item<'w> {
+    fn fetch<'w, 's>(
+        fetch: <Self::Fetch as bevy::ecs::query::QueryData>::Item<'w, 's>,
+    ) -> Self::Item<'w> {
         fetch
     }
 
@@ -100,7 +144,3 @@ impl<const LENGTH: usize> SimpleQueryData<true> for Spinner<LENGTH> {
         item
     }
 }
-
-#[derive(Bundle)]
-#[bundle(ignore_from_components)]
-pub struct Hope(pub bevy::ecs::spawn::SpawnRelatedBundle<bevy::prelude::ChildOf, bevy::prelude::Spawn<TextFontLoad>>);
