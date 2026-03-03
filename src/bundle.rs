@@ -19,6 +19,10 @@ macro_rules! BundleEffect {
         $crate::bundle::BundleEffect!(|construct| input: ($($input)*), output: ($($output)* + use<$const_generic_ident>))
     };
 
+    (|construct| input: ($generic_type:ident, $($input:tt)*), output: ($($output:tt)*)) => {
+        $crate::bundle::BundleEffect!(|construct| input: ($($input)*), output: ($($output)* + use<$generic_type>))
+    };
+
     (|construct| input: (), output: ($($output:tt)*)) => {
         $($output)*
     };
