@@ -8,35 +8,76 @@ pub trait BundleEffect {
 // TO DO: I wonder if it is possible to have this work like a regular Bundle derive macro, if the type doesn't implement BundleEffect. Probably using try_as_dyn.
 #[macro_export]
 macro_rules! BundleEffect {
-    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty $(= $default:tt)?),*> $($__:tt)*) => {
-        BundleEffect!(|internal| self_type: $name<$($crate::bundle::BundleEffect!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*>, to_type: <$name<$($crate::bundle::BundleEffect!(|generic_get_ident| generic: $(const $const_generic_ident:)? $generic_type)),*> as $crate::bundle::BundleEffect>::To, impl_generics: ($($(const $const_generic_ident:)? $generic_type),*), component_ids_return_type: $crate::bundle::BundleEffect!(|construct| input: ($($(const $const_generic_ident:)? $generic_type,)*), output: (impl Iterator<Item = ::bevy::ecs::component::ComponentId>)));
+    derive() ($(#[$_:meta])* $__:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty $(: $($bounds:ident)++)? $(= $default:tt)?),*> $($___:tt)*) => {
+        $crate::bundle::BundleEffect!(|1: Process Generics|
+            remaining_generics_to_check($($(const $const_generic_ident:)? $generic_type,)*),
+            self_type($name<),
+            impl_generics(<$($(const $const_generic_ident:)? $generic_type $(: $($bounds)++)?,)*>),
+            component_ids_return_type(impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<),
+        );
     };
-    derive() ($(#[$($_:tt)*])* $visibility:vis struct $name:ident $($__:tt)*) => {
-        BundleEffect!(|internal| self_type: $name, to_type: <$name as $crate::bundle::BundleEffect>::To, impl_generics: , component_ids_return_type: impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<>);
-    };
-
-    (|construct| input: (const $const_generic_ident:ident: $const_generic_type:ty, $($input:tt)*), output: ($($output:tt)*)) => {
-        $crate::bundle::BundleEffect!(|construct| input: ($($input)*), output: ($($output)* + use<$const_generic_ident>))
-    };
-
-    (|construct| input: ($generic_type:ident, $($input:tt)*), output: ($($output:tt)*)) => {
-        $crate::bundle::BundleEffect!(|construct| input: ($($input)*), output: ($($output)* + use<$generic_type>))
-    };
-
-    (|construct| input: (), output: ($($output:tt)*)) => {
-        $($output)*
+    derive() ($(#[$_:meta])* $__:vis struct $name:ident $($___:tt)*) => {
+        $crate::bundle::BundleEffect!(|1: Process Generics|
+            remaining_generics_to_check(),
+            self_type($name<),
+            impl_generics(),
+            component_ids_return_type(impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<),
+        );
     };
 
-    (|generic_get_ident| generic: const $const_generic_ident:ident: $const_generic_type:ty) => {
-        $const_generic_ident
+    (|1: Process Generics|
+        remaining_generics_to_check(const $generic_ident:ident: $generic_type:ty, $($remaining_generics_to_check:tt)*),
+        self_type($($self_type:tt)*),
+        impl_generics($($impl_generics:tt)*),
+        component_ids_return_type($($component_ids_return_type:tt)*),
+    ) => {
+        $crate::bundle::BundleEffect!(|1: Process Generics|
+            remaining_generics_to_check($($remaining_generics_to_check)*),
+            self_type($($self_type)* $generic_ident,),
+            impl_generics($($impl_generics)*),
+            component_ids_return_type($($component_ids_return_type)* $generic_ident,),
+        );
+    };
+    (|1: Process Generics|
+        remaining_generics_to_check($generic_type:ty, $($remaining_generics_to_check:tt)*),
+        self_type($($self_type:tt)*),
+        impl_generics($($impl_generics:tt)*),
+        component_ids_return_type($($component_ids_return_type:tt)*),
+    ) => {
+        $crate::bundle::BundleEffect!(|1: Process Generics|
+            remaining_generics_to_check($($remaining_generics_to_check)*),
+            self_type($($self_type)* $generic_type,),
+            impl_generics($($impl_generics)*),
+            component_ids_return_type($($component_ids_return_type)* $generic_type,),
+        );
+    };
+    (|1: Process Generics|
+        remaining_generics_to_check(),
+        self_type($($self_type:tt)*),
+        impl_generics($($impl_generics:tt)*),
+        component_ids_return_type($($component_ids_return_type:tt)*),
+    ) => {
+        log_syntax!{
+            $crate::bundle::BundleEffect!(|2: Implementation|
+                self_type($($self_type)*>),
+                impl_generics($($impl_generics)*),
+                component_ids_return_type($($component_ids_return_type)*>),
+            );
+        }
+        $crate::bundle::BundleEffect!(|2: Implementation|
+            self_type($($self_type)*>),
+            impl_generics($($impl_generics)*),
+            component_ids_return_type($($component_ids_return_type)*>),
+        );
     };
 
-    (|generic_get_use| generic: const $const_generic_ident:ident: $const_generic_type:ty) => {
-        use<$const_generic_ident>
-    };
-
-    (|internal| self_type: $self_type:ty, to_type: $to_type:ty, impl_generics: $(($($impl_generics:tt)*))?, component_ids_return_type: $($component_ids_return_type:tt)*) => {
-        unsafe impl$(<$($impl_generics)*>)? ::bevy::ecs::bundle::Bundle for $self_type {
+    //(|internal| self_type: $self_type:ty, to_type: $to_type:ty, impl_generics: $(($($impl_generics:tt)*))?, component_ids_return_type: $($component_ids_return_type:tt)*) => {
+    (|2: Implementation|
+        self_type($($self_type:tt)*),
+        impl_generics($($impl_generics:tt)*),
+        component_ids_return_type($($component_ids_return_type:tt)*),
+    ) => {
+        unsafe impl$($impl_generics)* ::bevy::ecs::bundle::Bundle for $($self_type)* {
             fn component_ids(
                 _: &mut ::bevy::ecs::component::ComponentsRegistrator,
             ) -> $($component_ids_return_type)* {
@@ -50,7 +91,7 @@ macro_rules! BundleEffect {
             }
         }
 
-        impl$(<$($impl_generics)*>)? ::bevy::ecs::bundle::DynamicBundle for $self_type {
+        impl$($impl_generics)* ::bevy::ecs::bundle::DynamicBundle for $($self_type)* {
             type Effect = Self;
             #[allow(unused_variables)]
             #[inline]

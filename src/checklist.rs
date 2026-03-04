@@ -2,10 +2,19 @@ use bevy::{color::palettes::css::{BLACK, GREY, WHITE}, prelude::*, ui_widgets::o
 use duck_back::Else;
 use crate::bundle::BundleEffect;
 
+//trace_macros!(true);
 #[derive(BundleEffect)]
-pub struct CheckList;
+pub struct CheckList<const TESTER: bool, T>(pub T);
 
-impl BundleEffect for CheckList {
+// BundleEffect!
+// (|2: Implementation|
+//     self_type(CheckList <TESTER, T,>),
+//     impl_generics(<const TESTER: bool, T: Send + Sync + 'static,>),
+//     component_ids_return_type(impl Iterator <Item = ::bevy::ecs::component::ComponentId> + use<TESTER, T>),
+// );
+//trace_macros!(false);
+
+impl<const TESTER: bool, T> BundleEffect for CheckList<TESTER, T> {
     fn effect(self, entity_world: &mut EntityWorldMut) {
         let entity = entity_world.id();
 

@@ -1,6 +1,7 @@
 #![feature(macro_derive)]
 #![feature(impl_trait_in_assoc_type)]
 #![feature(trace_macros)]
+#![feature(log_syntax)]
 
 // Spin a wheel to pick what task you must do. When completed you get a gem.
 // Gems can be used to purchase specific tasks, or re-roll.
@@ -38,7 +39,7 @@ fn start(mut commands: Commands) {
     commands.spawn(Camera2d);
 
     //commands.spawn(Spinner(["a"; 10]));
-    commands.spawn(CheckList);
+    //commands.spawn(CheckList::<true, ()>(()));
 }
 
 fn rotate(gradient: Option<Single<(&mut Spinner, &mut UiTransform)>>, time: Res<Time>) {
