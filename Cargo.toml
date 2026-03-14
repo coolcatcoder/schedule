@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.18", default-features = false, features = [
+bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_window",
     "bevy_sprite",
     "bevy_sprite_render",
@@ -26,3 +26,4 @@ bevy = { version = "0.18", default-features = false, features = [
     "debug",
 ] }
 duck_back = "1.0.0"
+rand = "0.10.0"

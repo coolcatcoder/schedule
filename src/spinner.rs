@@ -1,8 +1,113 @@
-use crate::{bundle::BundleEffect, query_data::SimpleQueryData, transform_2d::Transform2d};
+use crate::{TaskSlice, bundle::BundleEffect, query_data::SimpleQueryData};
 use bevy::{
     color::palettes::css::{BLUE, GREEN, RED, YELLOW},
     prelude::*,
 };
+
+#[derive(Component)]
+pub struct Speed {
+    pub speed: f32,
+    pub stop: f32,
+
+    pub degrees_per_slice: f32,
+
+    pub slices: Vec<TaskSlice>,
+    pub then: fn(Commands, TaskSlice),
+}
+
+pub fn spinner(commands: &mut Commands, slices: Vec<TaskSlice>, then: fn(Commands, TaskSlice)) {
+    let length = slices.len();
+    let degrees_per_slice = 360. / length as f32;
+    let stops = (0..length)
+        .flat_map(|index| {
+            let start = degrees_per_slice * index as f32;
+            let end = (start + degrees_per_slice).to_radians();
+            let colour = COLOUR_ORDER[index % COLOUR_ORDER.len()].into();
+
+            let slice = AngularColorStop {
+                color: colour,
+                angle: Some(start.to_radians()),
+                hint: end,
+            };
+            let avoid_blend = AngularColorStop {
+                color: colour,
+                angle: Some(end),
+                hint: end,
+            };
+
+            [slice, avoid_blend]
+        })
+        .collect();
+
+    commands.queue(move |world: &mut World| {
+        let font = world.resource::<AssetServer>().load("domine_regular.ttf");
+
+        let mut entity_world = world.spawn((
+            Node {
+                height: percent(95),
+                aspect_ratio: Some(1.),
+                border_radius: BorderRadius::MAX,
+                justify_self: JustifySelf::Center,
+                align_self: AlignSelf::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundGradient::from(ConicGradient {
+                start: 0.,
+                stops,
+                position: UiPosition::CENTER,
+                ..default()
+            }),
+        ));
+
+        for (index, task) in slices.iter().enumerate() {
+            entity_world.with_child((
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    position_type: PositionType::Absolute,
+
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                UiTransform {
+                    rotation: Rot2::degrees(degrees_per_slice * (0.5 + index as f32)),
+                    ..default()
+                },
+                children![(
+                    Node {
+                        width: px(250),
+                        height: px(250),
+                        bottom: percent(35),
+
+                        //align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        ..default()
+                    },
+                    //BackgroundColor(BLUE.into()),
+                    GlobalZIndex(1),
+                    children![(
+                        task.text(),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 30.,
+                            ..default()
+                        },
+                    )],
+                )],
+            ));
+        }
+
+        entity_world.insert(Speed {
+            speed: 1000.,
+            stop: rand::random_range(1.0..5.0),
+            degrees_per_slice,
+            slices,
+            then,
+        });
+    });
+}
 
 const COLOUR_ORDER: [Srgba; 4] = [RED, BLUE, GREEN, YELLOW];
 #[derive(BundleEffect, SimpleQueryData)]

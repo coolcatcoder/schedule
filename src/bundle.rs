@@ -8,7 +8,24 @@ pub trait BundleEffect {
 // TO DO: I wonder if it is possible to have this work like a regular Bundle derive macro, if the type doesn't implement BundleEffect. Probably using try_as_dyn.
 #[macro_export]
 macro_rules! BundleEffect {
+    // derive() ($(#[$_:meta])* $__:vis struct $name:ident <$($generics:tt)*> ($($___:tt)*);) => {
+    //     $crate::bundle::BundleEffect!(|1: Process Generics|
+    //         remaining_generics_to_check($($generics)*),
+    //         self_type($name<),
+    //         impl_generics(<$($generics)*>),
+    //         component_ids_return_type(impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<),
+    //     );
+    // };
+
     derive() ($(#[$_:meta])* $__:vis struct $name:ident <$($(const $const_generic_ident:ident:)? $generic_type:ty $(: $($bounds:ident)++)? $(= $default:tt)?),*> $($___:tt)*) => {
+        log_syntax! {
+            $crate::bundle::BundleEffect!(|1: Process Generics|
+                remaining_generics_to_check($($(const $const_generic_ident:)? $generic_type,)*),
+                self_type($name<),
+                impl_generics(<$($(const $const_generic_ident:)? $generic_type $(: $($bounds)++)?,)*>),
+                component_ids_return_type(impl Iterator<Item = ::bevy::ecs::component::ComponentId> + use<),
+            );
+        }
         $crate::bundle::BundleEffect!(|1: Process Generics|
             remaining_generics_to_check($($(const $const_generic_ident:)? $generic_type,)*),
             self_type($name<),
@@ -39,7 +56,7 @@ macro_rules! BundleEffect {
         );
     };
     (|1: Process Generics|
-        remaining_generics_to_check($generic_type:ty, $($remaining_generics_to_check:tt)*),
+        remaining_generics_to_check($generic_type:ident, $($remaining_generics_to_check:tt)*),
         self_type($($self_type:tt)*),
         impl_generics($($impl_generics:tt)*),
         component_ids_return_type($($component_ids_return_type:tt)*),
