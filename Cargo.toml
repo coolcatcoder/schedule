@@ -25,5 +25,6 @@ bevy = { version = "0.18.1", default-features = false, features = [
     "dynamic_linking",
     "debug",
 ] }
+chrono = "0.4.44"
 duck_back = "1.0.0"
 rand = "0.10.0"

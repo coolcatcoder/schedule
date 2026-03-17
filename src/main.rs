@@ -2,10 +2,13 @@
 #![feature(trace_macros)]
 #![feature(log_syntax)]
 #![feature(try_as_dyn)]
+#![feature(type_alias_impl_trait)]
 
 use std::{
     any::try_as_dyn,
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Write},
+    fs::OpenOptions,
+    io::{Read, Write as IoWrite},
     ops::Range,
     panic::Location,
     time::Duration,
@@ -45,7 +48,7 @@ fn main() {
             ..default()
         }))
         .add_systems(Startup, start)
-        .add_systems(Update, rotate)
+        .add_systems(Update, (rotate, seconds_remaining))
         .run();
 }
 
@@ -129,12 +132,38 @@ fn next(mut commands: Commands) {
         });
     }
 
-    let file = ObsidianFile::open("2026-03-11.md").else_error()?;
+    let notes_of_today = format!(
+        "/home/coolcatcoder/Documents/GitHub/random_notes/{}.md",
+        chrono::Local::now().format("%Y-%m-%d")
+    );
+    let mut file = OpenOptions::new()
+        .read(true)
+        .append(true)
+        .create(true)
+        .open(notes_of_today)
+        .unwrap();
 
-    spinner(&mut commands, tasks, |mut commands, task| {
-        show_task(&mut commands, task, |mut commands| {
-            commands.run_system_cached(next);
-        });
+    let mut file_string = String::new();
+    file.read_to_string(&mut file_string).unwrap();
+
+    if file_string.is_empty() {
+        let content = b"\
+---
+tags:
+  - daily
+---";
+        file.write_all(content).else_error()?;
+        info!("Empty!");
+    }
+
+    let today = ObsidianFile::new(file_string).else_error()?;
+
+    spinner(&mut commands, tasks, move |world, task| {
+        let mut commands = world.commands();
+        // write!(file, "").unwrap();
+        // show_task(&mut commands, task, |mut commands| {
+        //     commands.run_system_cached(next);
+        // });
     });
 }
 
@@ -144,7 +173,12 @@ fn start_debug(mut commands: Commands) {
     commands.run_system_cached(next);
 }
 
-fn show_task(commands: &mut Commands, task: TaskSlice, then: fn(Commands)) {
+fn show_task<F: FnOnce(&mut World, ()) + Send + Sync + 'static>(
+    commands: &mut Commands,
+    task: TaskSlice,
+    then: F,
+) {
+    let then = ThenHandle::new(commands, then);
     let text = task.title.to_owned();
     commands.queue(move |world: &mut World| {
         let font = world.resource::<AssetServer>().load("domine_regular.ttf");
@@ -171,6 +205,7 @@ fn show_task(commands: &mut Commands, task: TaskSlice, then: fn(Commands)) {
 
             if let Some(seconds) = task.seconds {
                 entity.spawn((
+                    SecondsRemaining(Duration::from_secs_f32(seconds)),
                     Text::new(""),
                     TextFont {
                         font: font.clone(),
@@ -214,7 +249,7 @@ fn show_task(commands: &mut Commands, task: TaskSlice, then: fn(Commands)) {
                 ))
                 .observe(move |_: On<Pointer<Click>>, mut commands: Commands| {
                     commands.entity(root_entity).despawn();
-                    then(commands);
+                    then.run(&mut commands, ());
                 });
         });
     });
@@ -308,7 +343,8 @@ fn rotate(
         let index = index.round() as usize;
         info!("{index}");
 
-        (speed.then)(commands, speed.slices.swap_remove(index));
+        let task = speed.slices.swap_remove(index);
+        speed.then.run(&mut commands, task);
     }
 }
 
@@ -426,6 +462,10 @@ impl ObsidianFile {
         )
         .unwrap();
 
+        Self::new(file)
+    }
+
+    fn new(file: String) -> Result<ObsidianFile> {
         enum Stage {
             Start,
             Properties,
@@ -563,3 +603,133 @@ impl ObsidianFile {
         })
     }
 }
+
+#[derive(Component)]
+struct SecondsRemaining(Duration);
+
+fn seconds_remaining(
+    seconds_remaining: Query<(&mut SecondsRemaining, &mut Text)>,
+    time: Res<Time>,
+) {
+    let time_delta = time.delta();
+
+    for (mut seconds_remaining, mut text) in seconds_remaining {
+        seconds_remaining.0 = seconds_remaining.0.saturating_sub(time_delta);
+        text.0.clear();
+        write!(
+            text.0,
+            "{}:{:02}",
+            seconds_remaining.0.as_secs() / 60,
+            seconds_remaining.0.as_secs() % 60
+        )
+        .else_error()?;
+    }
+}
+
+#[derive(Component)]
+struct ThenHandle<T> {
+    target: Entity,
+    run: fn(&mut World, Entity, T),
+}
+
+impl<T: Send + Sync + 'static> ThenHandle<T> {
+    fn new<F: FnOnce(&mut World, T) + Send + Sync + 'static>(
+        commands: &mut Commands,
+        then: F,
+    ) -> Self {
+        let entity = commands.spawn(Then(then)).id();
+        Self {
+            target: entity,
+            run: |world, target, value| {
+                world.entity_mut(target).take::<Then<F>>().else_error()?.0(world, value);
+                world.despawn(target);
+            },
+        }
+    }
+
+    fn run(&self, commands: &mut Commands, value: T) {
+        let target = self.target;
+        let run = self.run;
+        commands.queue(move |world: &mut World| {
+            run(world, target, value);
+        });
+    }
+}
+
+#[derive(Component)]
+struct Then<T>(T);
+
+/*
+trait AccessTo<T> {
+    fn access_to(self, run: impl FnOnce(T));
+}
+
+trait AccessFrom<T>: Sized {
+    fn access_from(value: T, run: impl FnOnce(Self));
+}
+
+impl<T, U: AccessFrom<T>> AccessTo<U> for T {
+    fn access_to(self, run: impl FnOnce(U)) {
+        U::access_from(self, run);
+    }
+}
+
+impl AccessFrom<&mut Commands<'_, '_>> for &mut World {
+    fn access_from(value: &mut Commands, run: impl FnOnce(Self)) {
+        value.queue(|world: &mut World| {
+            run(world);
+        });
+    }
+}
+*/
+
+trait AccessTo<T, Function> {
+    fn access_to(self, function: Function);
+}
+
+trait AccessFrom<T, Function> {
+    fn access_from(value: T, function: Function);
+}
+
+impl<T, U: AccessFrom<T, Function>, Function> AccessTo<U, Function> for T {
+    fn access_to(self, function: Function) {
+        U::access_from(self, function);
+    }
+}
+
+impl<Function: FnOnce(&mut World) + Send + Sync + 'static>
+    AccessFrom<&mut Commands<'_, '_>, Function> for &mut World
+{
+    fn access_from(value: &mut Commands<'_, '_>, function: Function) {
+        value.queue(function);
+    }
+}
+
+impl<Function: FnOnce(&mut i32) + Send + Sync + 'static> AccessFrom<&mut Commands<'_, '_>, Function>
+    for &mut i32
+{
+    fn access_from(value: &mut Commands<'_, '_>, function: Function) {
+        // /value.queue(function);
+    }
+}
+
+type Closure = impl FnOnce(&mut World) + Send + Sync + 'static;
+
+#[define_opaque(Closure)]
+fn closure() -> Closure {
+    |world: &mut World| {}
+}
+
+fn needs_world<T: for<'a> AccessTo<&'a mut World, Closure>>(world: T) {
+    world.access_to(closure());
+}
+
+fn weird(mut commands: Commands) {
+    needs_world(&mut commands);
+}
+
+// fn blah<T: for<'a> AccessTo<&'a mut World, impl FnOnce(&mut World) + Send + Sync + 'static>>(
+//     world: T,
+// ) {
+//     world.access_to(|world: &mut World| {});
+// }

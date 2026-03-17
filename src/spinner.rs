@@ -1,8 +1,9 @@
-use crate::{TaskSlice, bundle::BundleEffect, query_data::SimpleQueryData};
+use crate::{TaskSlice, ThenHandle, bundle::BundleEffect, query_data::SimpleQueryData};
 use bevy::{
     color::palettes::css::{BLUE, GREEN, RED, YELLOW},
     prelude::*,
 };
+use duck_back::Else;
 
 #[derive(Component)]
 pub struct Speed {
@@ -12,10 +13,14 @@ pub struct Speed {
     pub degrees_per_slice: f32,
 
     pub slices: Vec<TaskSlice>,
-    pub then: fn(Commands, TaskSlice),
+    pub then: ThenHandle<TaskSlice>,
 }
 
-pub fn spinner(commands: &mut Commands, slices: Vec<TaskSlice>, then: fn(Commands, TaskSlice)) {
+pub fn spinner<F: FnOnce(&mut World, TaskSlice) + Send + Sync + 'static>(
+    commands: &mut Commands,
+    slices: Vec<TaskSlice>,
+    then: F,
+) {
     let length = slices.len();
     let degrees_per_slice = 360. / length as f32;
     let stops = (0..length)
@@ -41,6 +46,7 @@ pub fn spinner(commands: &mut Commands, slices: Vec<TaskSlice>, then: fn(Command
 
     commands.queue(move |world: &mut World| {
         let font = world.resource::<AssetServer>().load("domine_regular.ttf");
+        let then = ThenHandle::new(&mut world.commands(), then);
 
         let mut entity_world = world.spawn((
             Node {
@@ -99,13 +105,13 @@ pub fn spinner(commands: &mut Commands, slices: Vec<TaskSlice>, then: fn(Command
             ));
         }
 
-        entity_world.insert(Speed {
+        entity_world.insert((Speed {
             speed: 1000.,
             stop: rand::random_range(1.0..5.0),
             degrees_per_slice,
             slices,
             then,
-        });
+        },));
     });
 }
 
