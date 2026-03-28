@@ -27,4 +27,6 @@ bevy = { version = "0.18.1", default-features = false, features = [
 ] }
 chrono = "0.4.44"
 duck_back = "1.0.0"
+indoc = "2.0.7"
 rand = "0.10.0"
+regex = "1.12.3"
