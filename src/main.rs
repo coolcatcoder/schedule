@@ -3,6 +3,11 @@
 #![feature(log_syntax)]
 #![feature(try_as_dyn)]
 #![feature(substr_range)]
+// Stuff:
+#![feature(generic_const_items)]
+#![feature(min_generic_const_args)]
+#![feature(opaque_generic_const_args)]
+#![expect(incomplete_features)]
 
 use std::{
     any::try_as_dyn,

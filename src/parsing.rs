@@ -2,6 +2,143 @@ use crate::DetachedStr;
 use bevy::prelude::*;
 use indoc::indoc;
 use regex::{Captures, Match, Regex};
+use std::ops::Add;
+
+enum MatchSegment {
+    EndOfFile,
+    Regex(&'static str),
+    Any,
+}
+
+enum MatchSegmentInternal {
+    EndOfFile,
+    Regex(Regex),
+    Any,
+    Or,
+}
+
+impl From<MatchSegment> for MatchSegmentInternal {
+    fn from(value: MatchSegment) -> Self {
+        match value {
+            MatchSegment::EndOfFile => MatchSegmentInternal::EndOfFile,
+            MatchSegment::Regex(regex) => MatchSegmentInternal::Regex(Regex::new(regex).unwrap()),
+            MatchSegment::Any => MatchSegmentInternal::Any,
+        }
+    }
+}
+
+struct NewMatcher<const LENGTH: usize> {
+    segments: [MatchSegmentInternal; LENGTH],
+}
+
+macro_rules! type_const {
+    ($($any:tt)*) => {
+        type const $($any)*;
+    };
+}
+
+type_const!(ADD<const A: usize, const B: usize>: usize = const { A + B });
+
+impl<const LENGTH: usize> Add<MatchSegment> for NewMatcher<LENGTH> {
+    type Output = NewMatcher<{ ADD::<LENGTH, 1> }>;
+
+    fn add(self, rhs: MatchSegment) -> Self::Output {
+        let mut array = [const { MatchSegmentInternal::Any }; { ADD::<LENGTH, 1> }];
+        for (index, value) in self.segments.into_iter().enumerate() {
+            array[index] = value;
+        }
+        array[LENGTH] = rhs.into();
+        NewMatcher { segments: array }
+    }
+}
+
+impl Add for MatchSegment {
+    type Output = NewMatcher<2>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        NewMatcher {
+            segments: [self.into(), rhs.into()],
+        }
+    }
+}
+
+fn parse_file_new(file: &str) {
+    let mut parser = Parser(file);
+    let better_regex = BetterRegex::new();
+
+    use MatchSegment::*;
+    let weird = M == "---" > "---";
+
+    //let properties_matcher = Matcher::new("---{properties: Any}---", 0);
+    let properties_matcher = Matcher::new("---((?:(?s).)*?)---", 0);
+    let property_matcher = Matcher::new(
+        indoc! {r"
+        (?x)
+        \n
+        (
+            (?:
+                .
+            )*?
+        ):
+
+        (
+            (?:(?s)
+                .
+            )*?
+        )
+
+        (?:
+            (?:
+                \n
+                (?:
+                    .
+                )*?
+                :
+            )|\z
+        )
+    "},
+        2,
+    );
+
+    //let section_matcher = Matcher::new("\n# {any(), title}\n", 0);
+    //let section_matcher = Matcher::new("\n# ((?:(?s).)*?)\n", 1);
+    // r"\n# {title: Heading}(\n{body: Any}(\n# |\z)|\z)"
+    // let section_matcher =
+    //     better_regex.match_next(r"\n# {title: Heading}(\n{body: Any}(\n# |\z)|\z)", "body");
+    let section_matcher = better_regex.match_next(
+        // Doesn't work, because the end of body includes \n# .
+        r"\n# {title: Heading}{body: Regex<(\n(.|\n)*?(\n# |\z))|\z>}",
+        "body",
+    );
+
+    let properties = parser
+        .consume(&properties_matcher)
+        .map(|captures| {
+            let mut parser = Parser(&captures[1]);
+            let mut others = vec![];
+
+            while let Some(captures) = parser.consume(&property_matcher) {
+                let property = InternalProperty {
+                    title: DetachedStr(file.substr_range(&captures[1]).unwrap()),
+                    body: DetachedStr(file.substr_range(&captures[2]).unwrap()),
+                };
+                others.push(property);
+            }
+
+            Properties {
+                tags: vec![],
+                others,
+            }
+        })
+        .unwrap_or_default();
+
+    while let Some(captures) = parser.consume(&section_matcher) {
+        info!("Section: {:?}", &captures["title"]);
+        info!("Body: {:?}", &captures[2]);
+    }
+
+    info!("Remaining:\n{:?}", parser.0);
+}
 
 struct BetterRegex(Matcher<usize>);
 
