@@ -1,34 +1,66 @@
 use crate::DetachedStr;
 use bevy::prelude::*;
+use core::range::Range;
 use indoc::indoc;
 use regex::{Captures, Match, Regex};
 use std::ops::Add;
 
-enum MatchSegment {
-    EndOfFile,
-    Regex(&'static str),
-    Any,
-}
+// enum MatchSegment {
+//     EndOfFile,
+//     Regex(&'static str),
+//     Any,
+// }
 
 enum MatchSegmentInternal {
-    EndOfFile,
+    Unused,
     Regex(Regex),
-    Any,
-    Or,
 }
 
-impl From<MatchSegment> for MatchSegmentInternal {
-    fn from(value: MatchSegment) -> Self {
-        match value {
-            MatchSegment::EndOfFile => MatchSegmentInternal::EndOfFile,
-            MatchSegment::Regex(regex) => MatchSegmentInternal::Regex(Regex::new(regex).unwrap()),
-            MatchSegment::Any => MatchSegmentInternal::Any,
-        }
+impl From<&str> for MatchSegmentInternal {
+    fn from(value: &str) -> Self {
+        Self::Regex(Regex::new(value).unwrap())
     }
+}
+
+// impl From<MatchSegment> for MatchSegmentInternal {
+//     fn from(value: MatchSegment) -> Self {
+//         match value {
+//             MatchSegment::EndOfFile => MatchSegmentInternal::EndOfFile,
+//             MatchSegment::Regex(regex) => MatchSegmentInternal::Regex(Regex::new(regex).unwrap()),
+//             MatchSegment::Any => MatchSegmentInternal::Any,
+//         }
+//     }
+// }
+
+#[derive(Clone, Copy)]
+struct SubStr<'a> {
+    from: &'a str,
+    range: Range<usize>,
 }
 
 struct NewMatcher<const LENGTH: usize> {
     segments: [MatchSegmentInternal; LENGTH],
+}
+const M: NewMatcher<0> = NewMatcher { segments: [] };
+
+impl<const LENGTH: usize> NewMatcher<LENGTH> {
+    fn next<'a>(&self, string: &'a str) -> Option<[SubStr<'a>; LENGTH]> {
+        let mut matches = [SubStr {
+            from: string,
+            range: Range::default(),
+        }; LENGTH];
+
+        for (index, segment) in self.segments.iter().enumerate() {
+            match segment {
+                MatchSegmentInternal::Unused => panic!("Unused should never appear."),
+                MatchSegmentInternal::Regex(regex) => {
+                    matches[index].range = regex.find(string)?.range().into();
+                }
+            }
+        }
+
+        Some(matches)
+    }
 }
 
 macro_rules! type_const {
@@ -39,11 +71,11 @@ macro_rules! type_const {
 
 type_const!(ADD<const A: usize, const B: usize>: usize = const { A + B });
 
-impl<const LENGTH: usize> Add<MatchSegment> for NewMatcher<LENGTH> {
+impl<const LENGTH: usize, T: Into<MatchSegmentInternal>> Add<T> for NewMatcher<LENGTH> {
     type Output = NewMatcher<{ ADD::<LENGTH, 1> }>;
 
-    fn add(self, rhs: MatchSegment) -> Self::Output {
-        let mut array = [const { MatchSegmentInternal::Any }; { ADD::<LENGTH, 1> }];
+    fn add(self, rhs: T) -> Self::Output {
+        let mut array = [const { MatchSegmentInternal::Unused }; { ADD::<LENGTH, 1> }];
         for (index, value) in self.segments.into_iter().enumerate() {
             array[index] = value;
         }
@@ -52,22 +84,22 @@ impl<const LENGTH: usize> Add<MatchSegment> for NewMatcher<LENGTH> {
     }
 }
 
-impl Add for MatchSegment {
-    type Output = NewMatcher<2>;
+// impl Add for MatchSegment {
+//     type Output = NewMatcher<2>;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        NewMatcher {
-            segments: [self.into(), rhs.into()],
-        }
-    }
-}
+//     fn add(self, rhs: Self) -> Self::Output {
+//         NewMatcher {
+//             segments: [self.into(), rhs.into()],
+//         }
+//     }
+// }
 
 fn parse_file_new(file: &str) {
     let mut parser = Parser(file);
     let better_regex = BetterRegex::new();
 
-    use MatchSegment::*;
-    let weird = M == "---" > "---";
+    let weird = M + "---" + "---";
+    let weird = weird.next(file).unwrap();
 
     //let properties_matcher = Matcher::new("---{properties: Any}---", 0);
     let properties_matcher = Matcher::new("---((?:(?s).)*?)---", 0);

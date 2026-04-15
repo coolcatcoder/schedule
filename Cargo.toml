@@ -3,6 +3,9 @@ name = "schedule"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = ["parsing"]
+
 [dependencies]
 bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_window",
@@ -28,5 +31,5 @@ bevy = { version = "0.18.1", default-features = false, features = [
 chrono = "0.4.44"
 duck_back = "1.0.0"
 indoc = "2.0.7"
-rand = "0.10.0"
+rand = "0.10.1"
 regex = "1.12.3"
