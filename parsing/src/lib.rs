@@ -2,12 +2,63 @@
 #![feature(min_generic_const_args)]
 #![feature(generic_const_args)]
 #![expect(incomplete_features)]
+#![feature(array_try_map)]
 
 use core::range::Range;
 use regex::Regex;
 use std::{fmt::Write, ops::Shr};
 
 mod horrors;
+
+struct RegexBuilder<T = Regex>(T);
+const R: RegexBuilder<()> = RegexBuilder(());
+
+impl<T: ToRegex> Shr<T> for RegexBuilder<()> {
+    type Output = RegexBuilder;
+
+    fn shr(self, rhs: T) -> Self::Output {
+        let mut string = String::new();
+        rhs.to_regex(&mut string);
+        RegexBuilder(Regex::new(&string).unwrap())
+    }
+}
+impl<T: ToRegex> Shr<T> for RegexBuilder {
+    type Output = Self;
+
+    fn shr(self, rhs: T) -> Self::Output {
+        let mut string = self.0.as_str().to_owned();
+        rhs.to_regex(&mut string);
+        RegexBuilder(Regex::new(&string).unwrap())
+    }
+}
+
+trait ToRegex {
+    fn to_regex(self, string: &mut String) -> Result<(), std::fmt::Error>;
+}
+impl ToRegex for &str {
+    fn to_regex(self, string: &mut String) -> Result<(), std::fmt::Error> {
+        write!(string, "{self}")
+    }
+}
+impl ToRegex for std::ops::RangeFrom<&str> {
+    fn to_regex(self, string: &mut String) -> Result<(), std::fmt::Error> {
+        write!(string, "(?:(?:{})*?)", self.start)
+    }
+}
+impl<const LENGTH: usize> ToRegex for [&str; LENGTH] {
+    fn to_regex(self, string: &mut String) -> Result<(), std::fmt::Error> {
+        write!(string, "(?:")?;
+
+        let mut iterator = self.into_iter();
+        let last = iterator.next_back().unwrap();
+        for regex in iterator {
+            write!(string, "(?:{regex})|")?;
+        }
+        write!(string, "(?:{last})")?;
+
+        write!(string, ")")
+    }
+}
 
 fn what() {
     let bad = || || || || || || || .. .. .. .. .. .. .. .. .. .. .. .. ..;
@@ -115,8 +166,49 @@ struct Parser<'a> {
 #[allow(nonstandard_style)]
 const Parser: fn(&str) -> Parser = |string| Parser { string, cursor: 0 };
 
+trait Matcher {
+    type Output<T>;
+
+    fn for_each_regex<'a>(
+        self,
+        f: impl FnMut(&Regex) -> Option<SubStr<'a>>,
+    ) -> Option<Self::Output<SubStr<'a>>>;
+}
+impl Matcher for &RegexBuilder {
+    type Output<T> = T;
+
+    fn for_each_regex<'a>(
+        self,
+        mut f: impl FnMut(&Regex) -> Option<SubStr<'a>>,
+    ) -> Option<Self::Output<SubStr<'a>>> {
+        f(&self.0)
+    }
+}
+impl<const LENGTH: usize> Matcher for [&RegexBuilder; LENGTH] {
+    type Output<T> = [T; LENGTH];
+
+    fn for_each_regex<'a>(
+        self,
+        mut f: impl FnMut(&Regex) -> Option<SubStr<'a>>,
+    ) -> Option<Self::Output<SubStr<'a>>> {
+        self.try_map(|regex| f(&regex.0))
+    }
+}
+
 impl<'a> Parser<'a> {
-    fn next<const LENGTH: usize>(
+    fn next<T: Matcher>(&mut self, matcher: T) -> Option<T::Output<SubStr<'_>>> {
+        matcher.for_each_regex(|regex| {
+            regex.find_at(self.string, self.cursor).map(|matched| {
+                self.cursor = matched.end();
+                SubStr {
+                    from: self.string,
+                    range: matched.range().into(),
+                }
+            })
+        })
+    }
+
+    fn next_old<const LENGTH: usize>(
         &mut self,
         matcher: &NewMatcher<LENGTH>,
     ) -> Option<[SubStr<'a>; LENGTH]> {
@@ -188,6 +280,8 @@ impl<'a> Parser<'a> {
     }
 }
 
+const END_OF_FILE: &str = r"\z";
+
 fn basic() {
     let file = include_str!("/home/coolcatcoder/Documents/GitHub/random_notes/My Path Forward.md");
     let mut parser = Parser {
@@ -195,9 +289,30 @@ fn basic() {
         cursor: 0,
     };
 
-    let properties_matcher = M >> "---" >> "---";
-    let start_of_property = (M >> "\n" >> ("."..) >> ":").to_regex();
-    let start_of_property = M >> MatchSegmentInternal::Regex(start_of_property);
+    let properties_matcher = R >> "---";
+    let property_matcher = R >> "\n" >> ("."..) >> ":";
+
+    let heading_matcher = R >> "\n# " >> ("."..) >> ["\n", END_OF_FILE];
+    println!("Heading Matcher: {:?}", heading_matcher.0.as_str());
+
+    if let Some([start, end]) = parser.next([&properties_matcher; 2]) {
+        let between = &file[start.range.end..end.range.start];
+        println!("Between:\n{}", between);
+
+        let mut parser = Parser(between);
+
+        while let Some(property) = parser.next(&property_matcher) {
+            println!("Property:\n{:?}", property.as_str());
+        }
+    }
+
+    while let Some(heading) = parser.next(&heading_matcher) {
+        println!("Heading:\n{:?}", heading.as_str());
+    }
+
+    // let properties_matcher = M >> "---" >> "---";
+    // let start_of_property = (M >> "\n" >> ("."..) >> ":").to_regex();
+    // let start_of_property = M >> MatchSegmentInternal::Regex(start_of_property);
 
     // let start_of_property = (M >> "\n" >> ("."..) >> ":").to_regex();
     // println!("Start of Property:\n{:?}", start_of_property.as_str());
@@ -217,27 +332,27 @@ fn basic() {
     //     properties.push(property);
     // }
 
-    let [start, end] = parser.next(&properties_matcher).unwrap();
-    let between = &file[start.range.end..end.range.start];
-    println!("Between:\n{}", between);
+    // let [start, end] = parser.next(&properties_matcher).unwrap();
+    // let between = &file[start.range.end..end.range.start];
+    // println!("Between:\n{}", between);
 
-    let mut between_parser = Parser(between);
+    // let mut between_parser = Parser(between);
     // let property = between_parser.next(&property_matcher).unwrap();
     // for sub_str in property {
     //     println!("Matched:\n{:?}", sub_str.as_str());
     // }
 
-    let mut properties = vec![];
-    while let Some(property) = between_parser.next(&start_of_property) {
-        properties.push(property);
-    }
+    // let mut properties = vec![];
+    // while let Some(property) = between_parser.next(&start_of_property) {
+    //     properties.push(property);
+    // }
 
-    for property in properties {
-        println!("Property:\n{:?}", property[0].as_str());
-    }
+    // for property in properties {
+    //     println!("Property:\n{:?}", property[0].as_str());
+    // }
 
-    let weird = .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..;
-    let why: std::ops::RangeFrom<std::ops::RangeFull> = (..)..;
+    // let weird = .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..;
+    // let why: std::ops::RangeFrom<std::ops::RangeFull> = (..)..;
 }
 
 #[cfg(test)]
